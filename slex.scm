@@ -237,6 +237,31 @@
                 
             (iter (cdr open)))))))
 
+(define (DFA/forward-step d c)
+  (call-with-current-continuation
+    (lambda (K)
+      (forall edge in (get-edges d)
+        ;(format #t "Input: ~A ~% Accept: ~A ~%" c (get-chars edge))
+        (if (member c (get-chars edge))
+            (K (get-dest edge))))
+      (K #f))))
+  
+(define (run-DFA D str)
+  
+  (let ((accepts (accepts-of-DFA D)))
+    (let iter ((current-state (start-of-DFA D))
+               (to-check (string->list str))
+               (stack '()))
+      ;(format #t "to-check: ~A ~%" to-check)
+      (cond ((and (not (null? to-check))
+                  (DFA/forward-step current-state (car to-check))) =>
+             (lambda (next-state)
+               (iter next-state (cdr to-check) (cons (car to-check) stack))))
+            (else
+             (list (and (memq current-state accepts) #t)
+                   (reverse stack)
+                   to-check))))))
+
 (define (NFA->DOT N filename)
   (define (plot-body port alist)
     (for-each

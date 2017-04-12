@@ -1,4 +1,4 @@
-(load-relative "slex.scm")
+(load-relative "../slex.scm")
 
 ; digit               -> [0-9]
 ; letter              -> [a-z]
@@ -33,7 +33,8 @@
 ;(define alist (NFA/nodes->alist N))
 
 (define D (NFA->DFA N))
-(DFA->DOT (car D) (cdr D) "simple.dot")
+;(DFA->DOT (car D) (cdr D) "simple.dot")
+(define r (run-DFA (car D) "identifier"))
 
 ;(define epsclos (NFA/eps-closure (caar (reverse alist))))
 

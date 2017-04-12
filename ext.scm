@@ -13,9 +13,24 @@
 ;;;           <v> binds to a element in <s>;
 ;;;
 (define-syntax forall
-  (syntax-rules (in)
+  (syntax-rules (in map)
+    ((_ (v c b) in s body ...)
+     (call-with-current-continuation
+       (lambda (b)
+         (foreach-k (lambda (v c) body ...) s))))
+    ((_ v in s map body ...)
+     (map (lambda (v) body ...) s))
     ((_ v in s body ...)
      (for-each (lambda (v) body ...) s))))
+
+(define (foreach-k proc lst)
+  (if (null? lst)
+      'unspecific
+      (begin
+        (call-with-current-continuation
+          (lambda (k)
+            (proc (car lst) k)))
+        (foreach-k proc (cdr lst)))))
 
 (define-syntax mapall
   (syntax-rules (in)
