@@ -1,0 +1,7 @@
+*.aux
+*.dot
+*.tex
+*.pdf
+*.log
+
+pearls.rkt
