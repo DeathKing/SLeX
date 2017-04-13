@@ -77,3 +77,11 @@
 (define rassq (association-procedure eq? cdr))
 (define rassv (association-procedure eqv? cdr))
 (define rassoc (association-procedure equal? cdr))
+
+(define (all? proc lst)
+  (cond ((null? lst)
+         (error "the 2nd argument should not be null!"))
+        ((null? (cdr lst))
+         (proc (car lst)))
+        (else
+         (and (proc (car lst)) (all? proc (cdr lst))))))

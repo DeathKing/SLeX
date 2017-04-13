@@ -6,27 +6,25 @@
 (load-option 'format)
 (load-relative "ext.scm")
 
-(define (sig c)
+
+;;; Primitive RE constructor
+(define eps
+  (cons 'eps '()))
+
+(define (sig . c)
   (cons 'sig
-        (cond ((char? c) (list c))
-              ((list? c) (sort c char<?))
+        (cond ((null? c) c)
+              ((all? char? c) (sort c char<?))
               (else (error "unexcept type")))))
 
-(define (exact s)
-  (cons 'exact s))
+(define (exact s)     (cons 'exact s))
+(define (exact-ci s)  (cons 'exact-ci s))
 
-(define (exact-ci s)
-  (cons 'exact-ci s))
+(define (alt . r)     (cons 'alt r))
+(define (seq . r)     (cons 'seq r))
+(define (kleen re)    (cons 'kleen re))
 
-(define (alt left right)
-  (cons 'alt (cons left right)))
-
-(define (seq first later)
-  (cons 'seq (cons first later)))
-
-(define (kleen re)
-  (cons 'kleen re))
-
+;;; Primitive DFA/NFA constructor
 (define (new-node edges) (cons '() edges))
 (define (new-node2 tag edges) (cons tag edges))
 (define (new-edge chars dest) (cons chars dest))
@@ -44,36 +42,80 @@
 (define (accepts-of-DFA M) (cdr M))
 
 (define (add-new-edge! chars from dest)
-  (set-cdr! from (append (cdr from) (list (new-edge chars dest)))))
+  (set-cdr! from
+            (append (get-edges from) (list (new-edge chars dest)))))
 
-(define (make-single-char-NFA chars)
-  (let* ((accept (new-node '()))
-         (start (new-node (list (new-edge chars accept)))))
-    (make-new-NFA start accept)))
+(define (make-eps-NFA)
+  (let ((accept (new-node '())))
+    (add-new-edge! 'eps accept accept)
+    (make-new-NFA accept accept)))
 
-(define (make-alt-NFA N1 N2)
-  (let ((start
-          (new-node (list (new-eps-edge (start-of-NFA N1))
-                          (new-eps-edge (start-of-NFA N2)))))
-        (accept (new-node '())))
-    (set-cdr! (accept-of-NFA N1) (list (new-eps-edge accept)))
-    (set-cdr! (accept-of-NFA N2) (list (new-eps-edge accept)))
-    (make-new-NFA start accept)))
+(define (make-sig-NFA chars)
+  (if (null? chars)
+      (make-eps-NFA)
+      (let* ((accept (new-node '()))
+             (start (new-node (list (new-edge chars accept)))))
+        (make-new-NFA start accept))))
 
-(define (make-seq-NFA N1 N2)
-  (let ((start (new-node (list (new-eps-edge (start-of-NFA N1)))))
-        (accept (new-node '())))
-    (set-cdr! (accept-of-NFA N1) (list (new-eps-edge (start-of-NFA N2))))
-    (set-cdr! (accept-of-NFA N2) (list (new-eps-edge accept)))
-    (make-new-NFA start accept)))
+(define (make-exact-NFA char-seq)
+  (if (null? char-seq)
+      (make-eps-NFA)
+      (let* ((N (make-exact-NFA (cdr char-seq)))
+             (accept (accept-of-NFA N))
+             (start
+              (new-node (list (new-edge (list (car char-seq)) (start-of-NFA N))))))
+        (make-new-NFA start accept))))
+
+(define (make-exact-ci-NFA char-seq)
+  (if (null? char-seq)
+      (make-eps-NFA)
+      (let* ((c (car char-seq))
+             (start (new-node '()))
+             (N (make-exact-NFA (cdr char-seq)))
+             (accept (accept-of-NFA N))
+             (start1 (start-of-NFA N)))
+        (if (char-alphabetic? c)
+            (begin
+              (add-new-edge! (char-upcase c) start start1)
+              (add-new-edge! (char-downcase c) start start1))
+            (add-new-edge! c start (start-of-NFA)))
+        (make-new-NFA start accept))))
+
+;;; translation rules for RE combinator
+(define (make-alt-NFA . N)
+  (if (null? N)
+      (make-eps-NFA)
+      (let ((start (new-node '()))
+            (accept (new-node '())))
+        (forall nfa in N
+          (add-new-edge! 'eps (accept-of-NFA nfa) accept)
+          (add-new-edge! 'eps start (start-of-NFA nfa)))
+        (make-new-NFA start accept))))
+
+(define (make-seq-NFA . N)
+  (if (null? N)
+      (make-eps-NFA)
+      (let ((head (car N))
+            (rest (apply make-seq-NFA (cdr N))))
+        (add-new-edge! 'eps (accept-of-NFA head) (start-of-NFA rest))
+        (make-new-NFA (start-of-NFA head) (accept-of-NFA rest)))))
+  
+  
+  ;(let ((start (new-node (list (new-eps-edge (start-of-NFA N1)))))
+  ;      (accept (new-node '())))
+  ;  (set-cdr! (accept-of-NFA N1) (list (new-eps-edge (start-of-NFA N2))))
+  ;  (set-cdr! (accept-of-NFA N2) (list (new-eps-edge accept)))
+  ;  (make-new-NFA start accept)))
 
 (define (make-kleen-NFA N)
-  (let* ((accept (new-node '()))
-         (start (new-node (list (new-eps-edge (start-of-NFA N))
-                                (new-eps-edge accept)))))
-    (set-cdr! (accept-of-NFA N) (list (new-eps-edge accept)
-                                      (new-eps-edge (start-of-NFA N))))
-    (make-new-NFA start accept)))
+  (if (null? N)
+      (make-eps-NFA)
+      (let* ((accept (new-node '()))
+             (start (new-node (list (new-eps-edge (start-of-NFA N))
+                                    (new-eps-edge accept)))))
+        (add-new-edge! 'eps (start-of-NFA N) (accept-of-NFA N))
+        (make-new-NFA start accept))))
+  
 
 ;;; NFA/eps-closre : NFA Node -> List<NFA Node>
 ;;;
@@ -157,18 +199,31 @@
                 (cons (cdr (assq (car open) alist)) result)))))
 
 ;;; RE->NFA : RE -> NFA Machine
-(define (RE->NFA re)
-  (pmatch re
-          (`(sig . ,chars)
-            (make-single-char-NFA chars))
-          (`(alt . (,left . ,right))
-            (make-alt-NFA (RE->NFA left) (RE->NFA right)))
-          (`(seq . (,first . ,later))
-            (make-seq-NFA (RE->NFA first) (RE->NFA later)))
-          (`(kleen . ,re)
-            (make-kleen-NFA (RE->NFA re)))
-          (`,__
-            (error "wrong regular expression."))))
+;(define (RE->NFA re)
+;  (pmatch re
+;          (`(sig . ,chars)
+;            (make-sig-NFA chars))
+;          (`(alt . (,left . ,right))
+;            (make-alt-NFA (RE->NFA left) (RE->NFA right)))
+;          (`(seq . (,first . ,later))
+;            (make-seq-NFA (RE->NFA first) (RE->NFA later)))
+;          (`(kleen . ,re)
+;            (make-kleen-NFA (RE->NFA re)))
+;          (`,__
+;            (error "wrong regular expression."))))
+
+(define (RE->NFA RE)
+  (let ((tag (car RE)) (cont (cdr RE)))
+    (format #t "CONT: ~A~%" cont)
+    (cond ((eq? tag 'eps)      (make-eps-NFA))
+          ((eq? tag 'sig)      (make-sig-NFA cont))
+          ((eq? tag 'exact)    (make-exact-NFA (string->list cont)))
+          ((eq? tag 'exact-ci) (make-exact-ci-NFA (string->list cont)))
+          ((eq? tag 'alt)      (apply make-alt-NFA (map RE->NFA cont)))
+          ((eq? tag 'seq)      (apply make-seq-NFA (map RE->NFA cont)))
+          ((eq? tag 'kleen)    (make-kleen-NFA (RE->NFA cont)))
+          (else
+            (error "wrong type of regular expression.")))))
 
 (define (serials->string srs)
     (join "," (map number->string srs)))
