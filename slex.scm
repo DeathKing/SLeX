@@ -32,6 +32,11 @@
 (define (get-edges node) (cdr node))
 (define (get-chars edge) (car edge))
 (define (get-dest node) (cdr node))
+(define (get-alphabet node)
+  (then (get-edges node)
+     -> (lambda (e) (map get-chars e))
+     -> list-flatten
+     -> list-unique))
 
 (define (make-new-NFA start accept) (cons start accept))
 (define (start-of-NFA N) (car N))
@@ -50,6 +55,10 @@
     (add-new-edge! 'eps accept accept)
     (make-new-NFA accept accept)))
 
+(define (make-just-accept-NFA)
+  (let ((accept (new-node '())))
+    (make-new-NFA accept accept)))
+
 (define (make-sig-NFA chars)
   (if (null? chars)
       (make-eps-NFA)
@@ -59,7 +68,7 @@
 
 (define (make-exact-NFA char-seq)
   (if (null? char-seq)
-      (make-eps-NFA)
+      (make-just-accept-NFA)
       (let* ((N (make-exact-NFA (cdr char-seq)))
              (accept (accept-of-NFA N))
              (start
@@ -67,22 +76,26 @@
         (make-new-NFA start accept))))
 
 (define (make-exact-ci-NFA char-seq)
+  (format #t "exact-ci!!!!~%")
   (if (null? char-seq)
-      (make-eps-NFA)
+      (make-just-accept-NFA)
       (let* ((c (car char-seq))
              (start (new-node '()))
-             (N (make-exact-NFA (cdr char-seq)))
+             (N (make-exact-ci-NFA (cdr char-seq)))
              (accept (accept-of-NFA N))
              (start1 (start-of-NFA N)))
         (if (char-alphabetic? c)
             (begin
-              (add-new-edge! (char-upcase c) start start1)
-              (add-new-edge! (char-downcase c) start start1))
-            (add-new-edge! c start (start-of-NFA)))
+              (format #t "[char: ~A]add new edge!~%" c)
+              (add-new-edge! (list (char-upcase c)) start start1)
+              (add-new-edge! (list (char-downcase c)) start start1)
+              )
+            (add-new-edge! (list c) start start1))
         (make-new-NFA start accept))))
 
 ;;; translation rules for RE combinator
 (define (make-alt-NFA . N)
+  (format #t "alt!!!!~%")
   (if (null? N)
       (make-eps-NFA)
       (let ((start (new-node '()))
@@ -93,6 +106,7 @@
         (make-new-NFA start accept))))
 
 (define (make-seq-NFA . N)
+  (format #t "seq!!!!~%")
   (if (null? N)
       (make-eps-NFA)
       (let ((head (car N))
@@ -100,21 +114,14 @@
         (add-new-edge! 'eps (accept-of-NFA head) (start-of-NFA rest))
         (make-new-NFA (start-of-NFA head) (accept-of-NFA rest)))))
   
-  
-  ;(let ((start (new-node (list (new-eps-edge (start-of-NFA N1)))))
-  ;      (accept (new-node '())))
-  ;  (set-cdr! (accept-of-NFA N1) (list (new-eps-edge (start-of-NFA N2))))
-  ;  (set-cdr! (accept-of-NFA N2) (list (new-eps-edge accept)))
-  ;  (make-new-NFA start accept)))
-
 (define (make-kleen-NFA N)
-  (if (null? N)
-      (make-eps-NFA)
-      (let* ((accept (new-node '()))
-             (start (new-node (list (new-eps-edge (start-of-NFA N))
-                                    (new-eps-edge accept)))))
-        (add-new-edge! 'eps (start-of-NFA N) (accept-of-NFA N))
-        (make-new-NFA start accept))))
+  (let* ((accept (new-node '()))
+          (start (new-node '())))
+    (add-new-edge! 'eps start accept)
+    (add-new-edge! 'eps start (start-of-NFA N))
+    (add-new-edge! 'eps (accept-of-NFA N) accept)
+    (add-new-edge! 'eps (start-of-NFA N) (accept-of-NFA N))
+    (make-new-NFA start accept)))
   
 
 ;;; NFA/eps-closre : NFA Node -> List<NFA Node>
@@ -164,19 +171,19 @@
           (else
             (let* ((current (car open))
                    (adj-nodes
-                     (filter (lambda (n) (and (not (assq n visited))
-                                              (not (memq n open))))
-                             (map get-dest (get-edges current)))))
-              (set-car! current count)
+                     (list-uniq
+                       (filter (lambda (n) (and (not (assq n visited))
+                                                (not (memq n open))))
+                               (map get-dest (get-edges current))))))
               (iter (cdr (append open adj-nodes))
                     (cons (cons current count) visited)
                     (+ count 1)))))))
 
-;;; NFA/alist->fastvec : List<(NFA Node . int)> -> Vector<NFA Node>
+;;; NFA/alist->fvec : List<(NFA Node . int)> -> Vector<NFA Node>
 ;;;
 ;;;  transform a association list a vector, which is a reverse map for that
 ;;;  alist.
-(define (NFA/alist->fastvec alist)
+(define (NFA/alist->fvec alist)
   (let ((fvec (make-vector (length alist))))
     (forall entry in alist
       (vector-set! fvec (cdr entry) (car entry)))
@@ -198,23 +205,8 @@
           (iter (cdr open)
                 (cons (cdr (assq (car open) alist)) result)))))
 
-;;; RE->NFA : RE -> NFA Machine
-;(define (RE->NFA re)
-;  (pmatch re
-;          (`(sig . ,chars)
-;            (make-sig-NFA chars))
-;          (`(alt . (,left . ,right))
-;            (make-alt-NFA (RE->NFA left) (RE->NFA right)))
-;          (`(seq . (,first . ,later))
-;            (make-seq-NFA (RE->NFA first) (RE->NFA later)))
-;          (`(kleen . ,re)
-;            (make-kleen-NFA (RE->NFA re)))
-;          (`,__
-;            (error "wrong regular expression."))))
-
 (define (RE->NFA RE)
   (let ((tag (car RE)) (cont (cdr RE)))
-    (format #t "CONT: ~A~%" cont)
     (cond ((eq? tag 'eps)      (make-eps-NFA))
           ((eq? tag 'sig)      (make-sig-NFA cont))
           ((eq? tag 'exact)    (make-exact-NFA (string->list cont)))
@@ -292,6 +284,104 @@
                 
             (iter (cdr open)))))))
 
+(define (DFA/is-accept? D st)
+  (not (not (memq st (accepts-of-DFA D)))))
+
+(define (DFA/find-eqv-class D alist fvec)
+  (let* (;(alist (NFA/nodes->alist D))
+         ;(fvec (NFA/alist->fvec alist))
+         (dfa-nodes (map car alist))
+         (table (make-2D-mirror-table (vector-length fvec)
+                                      (vector-length fvec)
+                                      '()))
+         (serial (lambda (n) (cdr (assq n alist))))
+         (to-check '()))
+    ; initialize the mirror table
+    (forall p in dfa-nodes
+      (forall q in dfa-nodes
+        (let ((sp (serial p)) (sq (serial q)))
+          (cond ((not (null? (mirror-table-get table sp sq)))
+                 'continue)
+                ((eq? (DFA/is-accept? D p) (DFA/is-accept? D q))
+                 (if (not (eq? 'added (mirror-table-get table sp sq)))
+                     (begin
+                       (mirror-table-put! table (serial p) (serial q) 'added)
+                       (set! to-check (cons (cons p q) to-check)))))
+                (else
+                  (mirror-table-put! table (serial p) (serial q) 'x))))))
+    ;(format #t "!!!!!!!!!!!!!!!!!!!~%")
+    (let iter ((changed #f))
+      (forall (pair cont brk) in to-check
+        (let* ((p (car pair)) (sp (serial p))
+               (q (cdr pair)) (sq (serial q)))
+          (if (not (equal? (get-alphabet p) (get-alphabet q)))
+              (begin
+                (mirror-table-put! table sp sq 'x)
+                (delq! pair to-check)
+                (cont 'nothing))
+              (forall c in (get-alphabet p)
+                (let ((nsp (serial (DFA/forward-step p c)))
+                      (nsq (serial (DFA/forward-step q c))))
+                  (if (eq? 'x (mirror-table-get table nsp nsq))
+                      (begin
+                        (mirror-table-put! table sp sq 'x)
+                        (delq! pair to-check)
+                        (set! changed #t)
+                        (cont 'nothing)))))))) 
+      (if changed (iter #f) to-check))))
+
+(define (trace-root d)
+  (cond ((null? (car d)) d)
+        ((eq? d (car d)) d)
+        (else
+         (trace-root (car d)))))
+
+(define (merge-edges! d)
+  (let ((alist '()))
+    (forall edge in (get-edges d)
+      (let ((dest (get-dest edge))
+            (chars (get-chars edge)))
+        (cond ((assq dest alist) =>
+               (lambda (entry)
+                 (set-cdr! entry (cons chars (cdr entry)))))
+              (else
+               (set! alist (cons dest (list chars)))))))
+    (format #t "444444444444444444444~%")
+    (format #t "alist size: ~A~%" (length alist))
+    (set-cdr! d
+              (mapall entry in alist
+                ;(format #t "cdr entry : ~A~%" (cdr entry))
+                (cons (sort (list-unique (list-flatten (cdr entry))) char<?)
+                      (car entry))))))
+
+(define (DFA/simplify! D)
+  (let* ((alist (NFA/nodes->alist D))
+         (fvec (NFA/alist->fvec alist))
+         (serial (lambda (n) (cdr (assq n alist))))
+         (eqv-class (DFA/find-eqv-class D alist fvec)))
+    (forall pair in eqv-class
+      (let* ((p (car pair)) (sp (serial p))
+             (q (cdr pair)) (sq (serial q))
+             (m (if (< sp sq) p q)) ; m is the smaller one
+             (n (if (< sp sq) q p)))
+        (set-car! n m)
+        (if (null? (car n))
+            (set-car! n n))))
+    (format #t "11111111111111111111111111~%")
+    (forall entry in alist
+      (forall edge in (get-edges (car entry))
+        (set-cdr! edge (trace-root (get-dest edge)))))
+    (format #t "2222222222222222222222222~%")
+    (forall entry in alist
+      (let ((root (trace-root (car entry))))
+        (if (not (eq? root (car entry)))
+            (set-cdr! root (append (get-edges root) (get-edges (car entry)))))))
+    (format #t "3333333333333333333333333~%")
+    ;(forall entry in alist
+    ;  (if (eq? (trace-root (car entry)) (car entry))
+    ;      (merge-edges! (car entry))))
+    D))
+
 (define (DFA/forward-step d c)
   (call-with-current-continuation
     (lambda (K)
@@ -300,6 +390,8 @@
         (if (member c (get-chars edge))
             (K (get-dest edge))))
       (K #f))))
+  
+  
   
 (define (run-DFA D str)
   
@@ -330,7 +422,7 @@
                         "d~A -> d~A [label=\"~A\"];~%"
                         from
                         to
-                        (stringfy (car edge)))))
+                        (stringfy (get-chars edge)))))
             (get-edges (car entry)))))
       alist))
   
@@ -353,7 +445,7 @@
     (forall entry in alist
       (let ((from (cdr entry)))
         (format port
-                "d~A [label=\"~A\"];~%"
+                "d~A [label=\"d_{~A}\"];~%"
                 from
                 ;(serials->string (cdr (assq (car entry) map-table)))
                 from
@@ -414,7 +506,7 @@
         (else (error "type error!"))))
 
 (define latex-escape
-  (let ((escape-table '((#\$ . "\\\\$")
+  (let ((escape-table '((#\$ . "\\\\$") (#\\ . "\\\\textbackslash")
                         (#\% . "\\\\%") (#\# . "\\\\#")
                         (#\_ . "\\\\_") (#\& . "\\\\&")
                         (#\{ . "\\\\{") (#\} . "\\\\}")

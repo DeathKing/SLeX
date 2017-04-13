@@ -34,7 +34,7 @@
 (define boolean (alt (exact-ci "#t") (exact-ci "#f")))
 (define character-name (alt (exact-ci "space") (exact-ci "newline")))
 (define character
-  (let ((hash-slash (exact "#\\")))
+  (let ((hash-slash (seq (sig #\#) (sig #\\))))
     (alt (seq hash-slash (apply sig alphanumerics))
          (seq hash-slash character-name))))
 
@@ -63,13 +63,25 @@
 
 ;(NFA->DOT N0 "simple.dot")
 
+(define token  (alt boolean identifier character) )
 
-(define N (RE->NFA identifier))
+
+(define N (RE->NFA token))
 (NFA->DOT N "test2.dot")
-;(define alist (NFA/nodes->alist N))
 
 (define D (NFA->DFA N))
 (DFA->DOT (car D) (cdr D) "simple.dot")
+
+;(define alist (NFA/nodes->alist (car D)))
+;(define fvec (NFA/alist->fvec alist))
+
+;(define E (DFA/find-eqv-class (car D) alist fvec))
+
+;(DFA/simplify! (car D))
+;(DFA->DOT (car D) '() "simplified.dot")
+
+
+;(define E (DFA/find-eqv-class (car D)))
 ;(define r (run-DFA (car D) "identifier"))
 
 ;(define epsclos (NFA/eps-closure (caar (reverse alist))))
