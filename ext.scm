@@ -1,3 +1,10 @@
+;;; SLeX - ext.scm
+;;;
+;;;   This file contains some useful syntax extension
+;;;
+;;; DeathKing <dk@hit.edu.cn>
+;;; 2017-04-08
+
 ;;; forall
 ;;;
 ;;; This is a useful syntax wrap for for-each function while writing some loop-
@@ -49,20 +56,28 @@
     ((_ e -> p1 -> p2 ...)
      (then (p1 e) -> p2 ...))))
 
-(define (list-unique lst)
-  (if (null? lst)
-      '()
-      (let ((first (car lst)) (rest (cdr lst)))
-        (if (member first rest)
-            (list-unique rest)
-            (cons first (list-unique rest))))))
-
 (define (list-uniq lst)
   (if (null? lst)
       '()
       (let ((first (car lst)) (rest (cdr lst)))
         (if (memq first rest)
             (list-uniq rest)
+            (cons first (list-uniq rest))))))
+
+(define (list-uniqv lst)
+  (if (null? lst)
+      '()
+      (let ((first (car lst)) (rest (cdr lst)))
+        (if (memv first rest)
+            (list-uniqv rest)
+            (cons first (list-uniqv rest))))))
+
+(define (list-unique lst)
+  (if (null? lst)
+      '()
+      (let ((first (car lst)) (rest (cdr lst)))
+        (if (member first rest)
+            (list-unique rest)
             (cons first (list-unique rest))))))
 
 (define (list-flatten lst)
@@ -76,13 +91,6 @@
 (define (list-join lst in)
   (reduce-left (lambda (x y) (append x in y)) '() lst))
 
-;;; join : str -> list<str> -> str
-(define (join in ss)
-  (reduce-left (lambda (x y) (string-append x in y)) "" ss))
-
-(define rassq (association-procedure eq? cdr))
-(define rassv (association-procedure eqv? cdr))
-(define rassoc (association-procedure equal? cdr))
 
 (define (all? proc lst)
   (cond ((null? lst)
@@ -91,6 +99,15 @@
          (proc (car lst)))
         (else
          (and (proc (car lst)) (all? proc (cdr lst))))))
+
+(define rassq (association-procedure eq? cdr))
+(define rassv (association-procedure eqv? cdr))
+(define rassoc (association-procedure equal? cdr))
+
+
+;;; join : str -> list<str> -> str
+(define (join in ss)
+  (reduce-left (lambda (x y) (string-append x in y)) "" ss))
 
 
 (define (make-2D-mirror-table width height ini-val)
