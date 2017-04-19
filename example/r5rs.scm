@@ -1,7 +1,7 @@
 (load-relative "../slex.scm")
 
 ; digit               -> [0-9]
-; letter              -> [a-z]
+; letter              -> [a-zA-Z]
 ; special-initial     -> ! | $ | % | & | * | / | : | < | = | > | ? | ^ | _ | ~
 ; special-subsequent  -> + | - | . | @
 ; peculiar-identifier -> + | - | ...
@@ -9,34 +9,31 @@
 ; subsequent          -> <initial | <digit> | <special-subsequent>
 ; identifier          -> <initial> <subsequent>* | <peculiar-identifier>
 
-(define digit  (sig #\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9))
-(define letter (sig #\a #\b #\c #\d #\e #\f #\g #\h #\i #\j #\k #\l #\m 
-                    #\n #\o #\p #\q #\r #\s #\t #\u #\v #\w #\x #\y #\z))
-(define special-initial (sig #\! #\$ #\% #\& #\* #\/ #\: 
-                             #\< #\= #\> #\? #\^ #\_ #\~))
-(define special-subsequent  (sig #\+ #\- #\. #\@))
-(define peculiar-identifier (alt (sig #\+ #\-) (exact "...")))
+(define digit  (sig slex:digit))
+(define letter (sig slex:alpha))
+(define special-initial (sig* #\! #\$ #\% #\& #\* #\/ #\: 
+                              #\< #\= #\> #\? #\^ #\_ #\~))
+(define special-subsequent  (sig* #\+ #\- #\. #\@))
+(define peculiar-identifier (alt (sig* #\+ #\-) (exact "...")))
 
 (define initial    (alt letter special-initial))
 (define subsequent (alt initial digit special-subsequent))
-(define identifier (alt (seq initial (kleen subsequent))
+(define identifier (alt (seq initial (kln* subsequent))
                         peculiar-identifier))
 
-(define alphanumerics
-  '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9
-    #\a #\b #\c #\d #\e #\f #\g #\h #\i #\j
-    #\k #\l #\m #\n #\o #\p #\q #\r #\s #\t
-    #\u #\v #\w #\x #\y #\z
-    #\A #\B #\C #\D #\E #\F #\G #\H #\I #\J
-    #\K #\L #\M #\N #\O #\P #\Q #\R #\S #\T
-    #\U #\V #\W #\X #\Y #\Z))
-
+; boolean        -> #t | #f
+; character      -> #\ <any character> | #\ <character-name>
+; character-name -> space | newline
+; string         -> " <string-element>* "
+; string-element -> <any character other than " or \> | \" | \\
 (define boolean (alt (exact-ci "#t") (exact-ci "#f")))
 (define character-name (alt (exact-ci "space") (exact-ci "newline")))
 (define character
-  (let ((hash-slash (seq (sig #\#) (sig #\\))))
-    (alt (seq hash-slash (apply sig alphanumerics))
+  (let ((hash-slash (seq (sig* #\#) (sig* #\\))))
+    (alt (seq hash-slash (sig slex:alphanum))
          (seq hash-slash character-name))))
+
+; number -> num-2 | num-8 | num-10 | num-16
 
 ;(define digit-R
 ;  (list (cons 2  (sig '(#\0 #\1)))
@@ -57,20 +54,14 @@
 ;                  (alt (sig #\+) (sig #\-))))
 
 
-
-;(define N0 (RE->NFA subsequent))
-;(define alist0 (NFA/nodes->alist N0))
-
-;(NFA->DOT N0 "simple.dot")
-
 (define token  (alt boolean identifier character) )
-
 
 (define N (RE->NFA token))
 (NFA->DOT N "test2.dot")
 
 (define D (NFA->DFA N))
-(DFA->DOT (car D) (cdr D) "simple.dot")
+
+(DFA->DOT (car D) "simple.dot")
 
 ;(define alist (NFA/nodes->alist (car D)))
 ;(define fvec (NFA/alist->fvec alist))
@@ -78,11 +69,13 @@
 ;(define E (DFA/find-eqv-class (car D) alist fvec))
 
 ;(DFA/simplify! (car D))
-;(DFA->DOT (car D) '() "simplified.dot")
+;(DFA->DOT (car D) "simplified.dot")
+;(format #t "simplified.dot done!~%")
 
 
 ;(define E (DFA/find-eqv-class (car D)))
-;(define r (run-DFA (car D) "identifier"))
+(define r (DFA/run (car D) "identifier"))
+
 
 ;(define epsclos (NFA/eps-closure (caar (reverse alist))))
 
