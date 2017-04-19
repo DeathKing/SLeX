@@ -54,7 +54,11 @@
 ;                  (alt (sig #\+) (sig #\-))))
 
 
-(define token  (alt boolean identifier character) )
+(define token  (alt boolean identifier character
+                    (sig* #\() (sig* #\)) (exact "#(") (sig* #\')
+                    (sig* #\`) (sig* #\,)  (sig* #\.)
+                    (exact ",@")
+                    ) )
 
 (define N (RE->NFA token))
 (NFA->DOT N "test2.dot")
@@ -74,8 +78,9 @@
 
 
 ;(define E (DFA/find-eqv-class (car D)))
-(define r (DFA/run (car D) "identifier"))
+;(define r (DFA/run (car D) "identifier"))
 
+(define r (RE/scan token "(define token  (alt boolean identifier character) )"))
 
 ;(define epsclos (NFA/eps-closure (caar (reverse alist))))
 

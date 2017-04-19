@@ -459,26 +459,34 @@
             (K (get-dest edge))))
       (K #f))))
 
-(define (DFA/run D str)
-  (let ((accepts (DFA/get-accepts D)))
-    (let iter ((current-state (NFA/get-start D))
-               (to-check (string->list str))
-               (stack '()))
-      (cond ((and (not (null? to-check))
-                  (DFA/forward-step current-state (car to-check))) =>
+(define (DFA/run D char-seq)
+  (let ((start (DFA/get-start D))
+        (accepts (DFA/get-accepts D)))
+    (let iter ((current-state start) (sequence char-seq) (stack '()))
+      (cond ((and (not (null? sequence))
+                  (DFA/forward-step current-state (car sequence))) =>
              (lambda (next-state)
-               (iter next-state (cdr to-check) (cons (car to-check) stack))))
+               (iter next-state (cdr sequence) (cons (car sequence) stack))))
             (else
              (list (and (memq current-state accepts) #t)
                    (reverse stack)
-                   to-check))))))
+                   sequence))))))
 
 (define (RE/compile RE)
   (car (NFA->DFA (RE->NFA RE))))
 
 (define (RE/matches? RE str)
   (let ((D (RE/compile RE)))
-    (car (DFA/run D str))))
+    (car (DFA/run D (string->list str)))))
+
+(define (RE/scan RE str)
+  (let ((D (RE/compile RE)) (char-seq (string->list str)))
+    (let iter ((run (DFA/run D char-seq)) (result '()))
+      (if (and (null? (list-ref run 1)) (null? (list-ref run 2)))
+          (reverse result)
+          (if (list-ref run 0)
+              (iter (DFA/run D (list-ref run 2)) (cons (list-ref run 1) result))
+              (iter (DFA/run D (cdr (append (list-ref run 1) (list-ref run 2)))) result))))))
 
 (define (NFA->DOT N filename #!optional node-seq)
   
@@ -489,7 +497,7 @@
         (start-time (get-universal-time))
         (start-clock (real-time-clock)))
     
-    (format #t "** [DFA->DOT] **~%")
+    (format #t "** [NFA->DOT] **~%")
     (format #t "  * Started at ~A:~%" 
             (universal-time->local-time-string start-time))
     (format #t "  * Writing common header ... ")  
