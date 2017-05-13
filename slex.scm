@@ -1,3 +1,15 @@
+;;;
+;;;       .M"""bgd `7MMF'               `YMM'   `MP' 
+;;;      ,MI    "Y   MM                   VMb.  ,P   
+;;;      `MMb.       MM                    `MM.M'    
+;;;        `YMMNq.   MM                      MMb     
+;;;      .     `MM   MM      ,  .gP"Ya     ,M'`Mb.   
+;;;      Mb     dM   MM     ,M ,M'   Yb   ,P   `MM.  
+;;;      P"Ybmmd"  .JMMmmmmMMM 8M"""""" .MM:.  .:MMa.
+;;;                            YM.    ,
+;;;                             `Mbmmd'
+;;;
+
 ;;; SLeX - Yet another lex generator written in Scheme.
 ;;;
 ;;; DeathKing <dk@hit.edu.cn>
@@ -30,8 +42,8 @@
 
 (define (alt . rs)    (cons 'alt rs))
 (define (seq . rs)    (cons 'seq rs))
+(define (rep? r)      (alt r eps))
 (define (kln* r)      (cons 'kln r))
-(define (kln? r)      (alt r eps))
 (define (kln+ r)      (seq r (kln* r)))
 
 ;;; Primitive DFA/NFA constructor
@@ -189,44 +201,44 @@
      -> list-compact
      -> list-uniq))
 
-;;; NFA/nodes->alist : FAMachine -> List<(NFA Node . int)>
+;;; FA/traverse-sequence : FAMachine -> List<(NFANode . int)>
 ;;;
-;;;    walk through all the graph, generate the a assocation list of the walk
-;;;    trace.
-(define (NFA/nodes->alist N #!optional map-table)
-  (let iter ((open (list (NFA/get-start N))) ; : List<NFANode>
+;;;    walk through all the graph from the start state, generate the a
+;;;    assocation list of the trace.
+(define (FA/traverse-sequence M #!optional map-table)
+  (let iter ((open (list (NFA/get-start M))) ; : List<NFANode>
              (visited '())                   ; : List<(NFANode . int)>
              (count 0))                      ; : int
     (cond ((null? open) visited)
           (else
             (let* ((current (car open))
                    (adjecents (then current -> get-edges => get-dest
-                                 %> (lambda (n)
-                                      (and (not (assq n visited))
-                                           (not (memq n open))))
+                                 %> (lambda (node)
+                                      (and (not (assq node visited))
+                                           (not (memq node open))))
                                  -> list-uniq))) 
               (iter (cdr (append open adjecents))
                     (cons (cons current count) visited)
                     (+ count 1)))))))
 
-;;; NFA/alist->fvec : List<(NFA Node . int)> -> Vector<NFA Node>
+;;; NFA/alist->fvec : List<(NFANode . int)> -> Vector<NFANode>
 ;;;
-;;;  transform a association list a vector, which is a reverse map for that
-;;;  alist.
+;;;    transform a association list a vector, which is a reverse map for
+;;;    that alist.
 (define (NFA/alist->fvec alist)
   (let ((fvec (make-vector (length alist))))
     (forall entry in alist
       (vector-set! fvec (cdr entry) (car entry)))
     fvec))
 
-;;; NFA/fast-serials->nodes : List<int> -> Vector<NFA Node> -> List<NFA Node>
+;;; NFA/fast-serials->nodes : List<int> -> Vector<NFANode> -> List<NFANode>
 (define (NFA/fast-serials->nodes serials fvec)
   (let iter ((rest serials) (result '()))
     (if (null? rest)
         (reverse result)
         (iter (cdr rest) (cons (vector-ref fvec (car rest)) result)))))
 
-;;; NFA/nodes->serials : List<NFA Node> -> List<(NFA Node . int> -> List<int>
+;;; NFA/nodes->serials : List<NFANode> -> List<(NFANode . int> -> List<int>
 (define (NFA/nodes->serials ds alist)
   (let iter ((open ds) (result '()))
     (if (null? open)
@@ -248,9 +260,9 @@
 (define (serials->string srs)
   (join "," (map number->string srs)))
 
-;;; make-binary-partions : T => List<T> -> List<(List<T> . List<T>)>
+;;; make-binary-partions : List<T> -> List<(List<T> . List<T>)>
 ;;;
-;;;    given L : List<T>, generate all the pairs p of form  (S . R), such that:
+;;;    given L : List<T>, generate all the pairs p of form (S . R), such that:
 ;;;        1) S union R = L
 ;;;        2) S intersection R = EMPTY-SET
 (define (make-binary-partitions ns)
@@ -264,10 +276,11 @@
             (set! r (cons (cons (car entry) (cons n (cdr entry))) r)))
           r))))
 
+;;; NFA->DFA : NFAMachine -> List<(NFANode . int)> -> DFAMachine
 (define (NFA->DFA N #!optional node-seq)
-  ; 
+  ; alist : List<(NFANode . int)>
   (define alist
-    (if (default-object? node-seq) (NFA/nodes->alist N) node-seq))
+    (if (default-object? node-seq) (FA/traverse-sequence N) node-seq))
   ; nfa-accept-sr : int
   ; we need this to mark all the accept state of DFA
   (define nfa-accept-sr (cdr (assq (NFA/get-accept N) alist)))
@@ -298,7 +311,8 @@
                (all-xtions (then current-nfa-nodes      
                               ; : List<List<(char-set . NFANode)>>
                               => get-edges
-                              ; : List<(char-set . NFANode)>           
+                              ; : List<(char-set . NFANode)>
+                              ; this procedure is used to merge list
                               -> (lambda (l) (fold-left append '() l))
                               ; filter out those eps edge
                               %> (lambda (e) (not (eps-edge? e)))
@@ -355,102 +369,97 @@
                              (let ((dest-dfa-node (make-node)))
                                (add-edge! sigma3 current-dfa-node dest-dfa-node)
                                (set! map-table (cons (cons dest-dfa-node d2-epsclo-sr) map-table))
-                               (set! open (append open (list (cons d2-epsclo d2-epsclo-sr))))))))                    
-                    ))
-                  (iter (cdr open))))
-          ))))
+                               (set! open (append open (list (cons d2-epsclo d2-epsclo-sr))))))))))
+                  (iter (cdr open))))))))
 
-;(define (DFA/is-accept? D st)
-;  (not (not (memq st (DFA/get-accepts D)))))
+;;; DFA/is-accept? : DFAMachine -> DFANode -> Boolean
+(define (DFA/is-accept? D st)
+  (not (not (memq st (DFA/get-accepts D)))))
 
-;(define (DFA/find-eqv-class D alist fvec)
-;  (let* ((dfa-nodes (map car alist))
-;         (table (make-2D-mirror-table (vector-length fvec)
-;                                      (vector-length fvec)
-;                                      '()))
-;         (serial (lambda (n) (cdr (assq n alist))))
-;         (to-check '()))
-;    ; initialize the mirror table
-;    (forall p in dfa-nodes
-;      (forall q in dfa-nodes
-;        (let ((sp (serial p)) (sq (serial q)))
-;          (cond ((not (null? (mirror-table-get table sp sq)))
-;                 'continue)
-;                ((eq? (DFA/is-accept? D p) (DFA/is-accept? D q))
-;                 (if (not (eq? 'added (mirror-table-get table sp sq)))
-;                     (begin
-;                       (mirror-table-put! table (serial p) (serial q) 'added)
-;                       (set! to-check (cons (cons p q) to-check)))))
-;                (else
-;                  (mirror-table-put! table (serial p) (serial q) 'x))))))
-;    (let iter ((changed #f))
-;      (forall (pair cont brk) in to-check
-;        (let* ((p (car pair)) (sp (serial p))
-;               (q (cdr pair)) (sq (serial q)))
-;          (if (not (equal? (get-alphabet p) (get-alphabet q)))
-;              (begin
-;                (mirror-table-put! table sp sq 'x)
-;                (delq! pair to-check)
-;                (cont 'nothing))
-;              (forall c in (get-alphabet p)
-;                (let ((nsp (serial (DFA/forward-step p c)))
-;                      (nsq (serial (DFA/forward-step q c))))
-;                  (if (eq? 'x (mirror-table-get table nsp nsq))
-;                      (begin
-;                        (mirror-table-put! table sp sq 'x)
-;                        (delq! pair to-check)
-;                        (set! changed #t)
-;                        (cont 'nothing)))))))) 
-;      (if changed (iter #f) to-check))))
+;;; DFA/find-eqv-class : 
+;;; DFAMachine -> List<(DFANode . int)> -> Vector<DFANode> -> List<DFANode>
+(define (DFA/find-eqv-class D alist fvec)
+  (let* ((dfa-nodes (map car alist))
+         (flen (vector-length fvec))
+         (table (make-mirror-table flen flen '()))
+         (serial (lambda (n) (cdr (assq n alist))))
+         (to-check '()))
+    ; initialize the mirror table
+    (forall p in dfa-nodes
+      (forall q in dfa-nodes
+        (let ((sp (serial p)) (sq (serial q)))
+          (cond ((not (null? (mirror-table-get table sp sq)))
+                 'continue)
+                ((eq? (DFA/is-accept? D p) (DFA/is-accept? D q))
+                 (if (not (eq? 'added (mirror-table-get table sp sq)))
+                     (begin
+                       (mirror-table-put! table (serial p) (serial q) 'added)
+                       (set! to-check (cons (cons p q) to-check)))))
+                (else
+                  (mirror-table-put! table (serial p) (serial q) 'x))))))
+    (let iter ((changed #f))
+      (forall (pair cont brk) in to-check
+        (let* ((p (car pair)) (sp (serial p))
+               (q (cdr pair)) (sq (serial q)))
+          (if (not (char-set=? (get-alphabet p) (get-alphabet q)))
+              (begin
+                (mirror-table-put! table sp sq 'x)
+                (delq! pair to-check)
+                (cont 'nothing))
+              (forall c in (get-alphabet p)
+                (let ((nsp (serial (DFA/forward-step p c)))
+                      (nsq (serial (DFA/forward-step q c))))
+                  (if (eq? 'x (mirror-table-get table nsp nsq))
+                      (begin
+                        (mirror-table-put! table sp sq 'x)
+                        (delq! pair to-check)
+                        (set! changed #t)
+                        (cont 'nothing)))))))) 
+      (if changed (iter #f) to-check))))
 
-;(define (trace-root d)
-;  (cond ((null? (car d)) d)
-;        ((eq? d (car d)) d)
-;        (else
-;         (trace-root (car d)))))
+(define (trace-root d)
+  (cond ((null? (car d)) d)
+        ((eq? d (car d)) d)
+        (else
+         (trace-root (car d)))))
 
-;(define (merge-edges! d)
-;  (let ((alist '()))
-;    (forall edge in (get-edges d)
-;      (let ((dest (get-dest edge))
-;            (chars (get-chars edge)))
-;        (cond ((assq dest alist) =>
-;               (lambda (entry)
-;                 (set-cdr! entry (cons chars (cdr entry)))))
-;              (else
-;               (set! alist (cons (cons dest (list chars)) alist))))))
-;    (set-cdr! d 
-;              (map
-;                (lambda (entry)
-;                  (cons (sort (list-uniq (list-flatten (cdr entry))) char<?)
-;                        (car entry)))
-;                alist))))
+(define (merge-edges! d)
+  (let ((alist '()))
+    (forall edge in (get-edges d)
+      (let ((dest (get-dest edge)) (charset (get-char-set edge)))
+        (cond ((assq dest alist) =>
+               (lambda (entry)
+                 (set-cdr! entry (char-set-union charset (cdr entry)))))
+              (else
+               (set! alist (cons (cons dest charset) alist))))))
+    (set-cdr! d (alist-reverse-all-pairs alist))))
 
-;(define (DFA/simplify! D)
-;  (let* ((alist (NFA/nodes->alist D))
-;         (fvec (NFA/alist->fvec alist))
-;         (serial (lambda (n) (cdr (assq n alist))))
-;         (eqv-class (DFA/find-eqv-class D alist fvec)))
-;    (forall pair in eqv-class
-;      (let* ((p (car pair)) (sp (serial p))
-;             (q (cdr pair)) (sq (serial q))
-;             (m (if (< sp sq) p q)) ; m is the smaller one
-;             (n (if (< sp sq) q p)))
-;        (set-car! n m)
-;        (if (null? (car n))
-;            (set-car! n n))))
-;    (forall entry in alist
-;      (forall edge in (get-edges (car entry))
-;        (set-cdr! edge (trace-root (get-dest edge)))))
-;    (forall entry in alist
-;      (let ((root (trace-root (car entry))))
-;        (if (not (eq? root (car entry)))
-;            (set-cdr! root (append (get-edges root) (get-edges (car entry)))))))
-;    (forall entry in alist
-;      (if (eq? (trace-root (car entry)) (car entry))
-;          (merge-edges! (car entry))))
-;    D))
+(define (DFA/simplify! D alist fvec)
+  (let* (;(alist (FA/traverse-sequence D))
+         ;(fvec (NFA/alist->fvec alist))
+         (serial (lambda (n) (cdr (assq n alist))))
+         (eqv-class (DFA/find-eqv-class D alist fvec)))
+    (forall pair in eqv-class
+      (let* ((p (car pair)) (sp (serial p))
+             (q (cdr pair)) (sq (serial q))
+             (m (if (< sp sq) p q)) ; m is the smaller one
+             (n (if (< sp sq) q p)))
+        (set-car! n m)
+        (if (null? (car n))
+            (set-car! n n))))
+    (forall entry in alist
+      (forall edge in (get-edges (car entry))
+        (set-cdr! edge (trace-root (get-dest edge)))))
+    (forall entry in alist
+      (let ((root (trace-root (car entry))))
+        (if (not (eq? root (car entry)))
+            (set-cdr! root (append (get-edges root) (get-edges (car entry)))))))
+    (forall entry in alist
+      (if (eq? (trace-root (car entry)) (car entry))
+          (merge-edges! (car entry))))
+    D))
 
+;;; DFA/forward-step : DFANode -> char -> Boolean | DFANode
 (define (DFA/forward-step d c)
   (call-with-current-continuation
     (lambda (K)
@@ -459,6 +468,9 @@
             (K (get-dest edge))))
       (K #f))))
 
+;;; DFA/run : DFANode -> List<char> -> (Boolean List<char> List<char>)
+;;;
+;;; FIXME : we could implememnt stack as queue instead of queue
 (define (DFA/run D char-seq)
   (let ((start (DFA/get-start D))
         (accepts (DFA/get-accepts D)))
@@ -491,7 +503,7 @@
 (define (NFA->DOT N filename #!optional node-seq)
   
   (define sequence
-    (if (default-object? node-seq) (NFA/nodes->alist N) node-seq))
+    (if (default-object? node-seq) (FA/traverse-sequence N) node-seq))
   
   (let ((port (open-output-file filename))
         (start-time (get-universal-time))
@@ -541,7 +553,7 @@
 (define (DFA->DOT D filename #!optional node-seq map-table)
    
   (define sequence
-    (if (default-object? node-seq) (NFA/nodes->alist D) node-seq))
+    (if (default-object? node-seq) (FA/traverse-sequence D) node-seq))
 
   (let* ((port (open-output-file filename))
          (start-time (get-universal-time))
@@ -606,18 +618,22 @@
                         (#\{ . "\\\\{") (#\} . "\\\\}")
                         (#\~ . "\\\\textasciitilde")
                         (#\^ . "\\\\textasciicircum"))))
-    (lambda (c)
-      (let ((entry (assq (integer->char c) escape-table)))
-        (if entry
-            (cdr entry)
-            (integer->char c))))))
+    (lambda (char-code)
+      (cond ((assq (integer->char char-code) escape-table) =>
+             (lambda (entry) (cdr entry)))
+            ((char-set-member? slex:graphic (integer->char char-code))
+             (integer->char char-code))
+            (else
+             (format #f "#\\U+~A" (number->string char-code 16)))))))
 
 (define scalar-values->strings
   (let* ((e latex-escape)
          (f (lambda (interval)
               (cond ((number? interval)
                      (format #f "~A" (e interval)))
+                     ;(format #f "~A" interval))
                     (else
                      (format #f "[~A-~A]" (e (car interval)) (e (- (cdr interval) 1))))))))
+                     ;(format #f "[~A-~A]" (car interval) (- (cdr interval) 1)))))))
     (lambda (cs) (map f cs))))
 

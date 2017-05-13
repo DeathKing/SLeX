@@ -80,15 +80,14 @@
 ;;;       <exp> ::= <arrow> <identifier>
 ;;;       <arrow> ::= -> | ~> | => | %>
 ;;;
-;;;   p and p0 must be a one argument procedure, (p e) will be evaluated
-;;;   at first, then pass it as argument to p0 to further evaluation, and
-;;;   so on.
-
-;;;   call -> : T -> (T -> U) -> U
-;;;  apply ~> : List<T> -> (T* -> U) -> U
-;;;    map => : List<T> -> (T -> U) -> List<U>
-;;; filter %> : List<T> -> (T -> Boolean) -> List<T>
-
+;;;    p and p0 must be a one argument procedure, (p e) will be evaluated
+;;;    at first, then pass it as argument to p0 to further evaluation, and
+;;;    so on.
+;;;
+;;;              call -> : T -> (T -> U) -> U
+;;;             apply ~> : List<T> -> (T* -> U) -> U
+;;;               map => : List<T> -> (T -> U) -> List<U>
+;;;            filter %> : List<T> -> (T -> Boolean) -> List<T>
 (define-syntax then
   (syntax-rules (-> => ~> %>)
     ((_ e -> p)  (p e))
@@ -145,7 +144,6 @@
 (define rassv (association-procedure eqv? cdr))
 (define rassoc (association-procedure equal? cdr))
 
-
 ; assq-entries : List<T> -> List<(T . U)> -> List<(T . U)>
 (define (assq-entries items alist)
   (map (lambda (x) (assq x alist)) items))
@@ -163,7 +161,7 @@
     (if (null? lst)
         result
         (iter (cdr lst)
-              (cons (cons (cdr (car lst)) (car (car lst))) result)))))
+              (cons (cons (cdar lst) (caar lst)) result)))))
 
 ; alist-merge : List<(T . U)> -> (U -> U -> U) -> List<(T . U)>
 (define (alist-merge alist proc)
@@ -179,13 +177,12 @@
 (define (alist-get-keys alist) (map car alist))
 (define (alist-get-values alist) (map cdr alist))
 
-
 ;;; join : str -> list<str> -> str
 (define (join in ss)
   (reduce-left (lambda (x y) (string-append x in y)) "" ss))
 
 
-(define (make-2D-mirror-table width height ini-val)
+(define (make-mirror-table width height ini-val)
   (make-initialized-vector height
     (lambda (_)
       (make-vector width ini-val))))

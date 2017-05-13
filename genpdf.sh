@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
 
-dot2tex -o $1.tex $1.dot
-xelatex $1.tex
-open $1.pdf
+for i in $* ; do
+	dot2tex -o $i.tex $i.dot
+	xelatex $i.tex
+	open $i.pdf
+done
