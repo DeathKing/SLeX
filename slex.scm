@@ -43,8 +43,8 @@
 (define (alt . rs)    (cons 'alt rs))
 (define (seq . rs)    (cons 'seq rs))
 (define (rep? r)      (alt r eps))
+(define (rep+ r)      (seq r (kln* r)))
 (define (kln* r)      (cons 'kln r))
-(define (kln+ r)      (seq r (kln* r)))
 
 ;;; Primitive DFA/NFA constructor
 
@@ -54,6 +54,22 @@
 ;        : (Object, List<DFAEdge>) | (Object, List<NFAEdge>)
 (define (make-node)      (cons '() '()))
 (define (make-node1 tag) (cons tag '()))
+(define (set-node-tag! node tag) (set-car! node tag))
+(define (get-node-tag node)     (car node))
+(define (node-tag-setted? node) (null? (get-node-tag node)))
+(define (node-tag-set-attr! node attr value)
+  (let ((tag (get-node-tag node)))
+    (cond ((assq attr tag) =>
+           (lambda (entry)
+             (set-cdr! entry value)))
+          (else
+            (set-node-tag! node (cons (cons attr value) tag))))))
+
+(define (node-tag-get-attr node attr #!optional default)
+  (let ((tag (get-node-tag node)))
+    (cond ((assq attr tag) => cdr)
+          ((default-object? default) '())
+          (else default))))
 
 ; A edge connect two nodes 
 ; FAEdge : DFAEdge | NFAEdge
@@ -63,6 +79,7 @@
 (define (get-edges node)         (cdr node))
 (define (get-char-set edge)      (car edge))
 (define (get-dest edge)          (cdr edge))
+(define (set-dest! edge dest)     (set-cdr! edge dest))
 (define (eps-edge? edge)         (eq? 'eps (get-char-set edge)))
 
 ; add-edge! : char-set -> FANode -> FANode -> #unspecific
@@ -72,6 +89,21 @@
 ; add-eps-edge! : FANode -> FANode -> #unspecific
 (define (add-eps-edge! from dest)
   (set-cdr! from (cons (make-eps-edge dest) (get-edges from))))
+
+(define (only-eps-edge? node)
+  (let ((edges (get-edges node)))
+    (and (not (null? edges))
+         (equal? 1 (length edges))
+         (eps-edge? (car edges)))))
+
+; nodes whose edges both are eps-transitions
+(define (Node/administrative? node)
+  (and (not (Node/terminated? node))
+       
+       ))
+
+(define (Node/terminated? node)
+  (null? (get-edges node)))
 
 ; get-alphabet : FANode -> char-set
 (define (get-node-alphabet node)
@@ -245,6 +277,87 @@
         (sort result <)
         (iter (cdr open) (cons (cdr (assq (car open) alist)) result)))))
 
+
+(define (nanobench desc exp)
+  (format #t "** [Nanobench] **~%")
+  (format #t "  * Expression: ~s~%" desc)
+  (with-timings exp
+    (lambda (run-time gc-time real-time)
+      (let ((gc-time   gc-time);(internal-time/ticks->seconds gc-time))
+            (cpu-time  run-time);(internal-time/ticks->seconds run-time))
+            (real-time real-time)) ;(internal-time/ticks->seconds real-time))
+        (format #t " ---------------------------------------------------------~%")
+        (format #t "  *  run-time: ~A~%" run-time)
+        (format #t "  *   gc-time: ~A~%" gc-time)
+        (format #t "  * real-time: ~A~%" real-time)))))
+
+(define-syntax @nanobench
+  (syntax-rules ()
+    ((_ exp)
+     (nanobench (quote exp) (lambda () exp)))))
+
+(define (NFA/eps-elimination N)
+  (define id (lambda (x) x))
+  
+  (define (find-root node)
+    (cond ((node-tag-get-attr node 'root-node #f) => id)
+          ((Node/terminated? node)
+           (format #t "terminated node.~%")
+           (begin
+             (node-tag-set-attr! node 'root-node node)
+             node))
+          ((only-eps-edge? node)
+           ;(format #t "only eps edge.~%")
+           (if (node-tag-get-attr node 'loop-token #f)
+               (cond ((node-tag-get-attr node 'root-node #f) => id)
+                     (else
+                       (node-tag-set-attr! node 'root-node node)
+                       node))
+               (begin
+                 (node-tag-set-attr! node 'loop-token #t)
+                 (let ((root (find-root (get-dest (car (get-edges node))))))
+                   (node-tag-set-attr! node 'root-node root)
+                   root))
+               ))
+          (else
+            (node-tag-set-attr! node 'loop-token #t)
+            (node-tag-set-attr! node 'root-node node)
+            node)))
+  
+  (define (update-edges! node)
+    ;(if (only-eps-edge? node)
+    ;    (format #t "update only eps edge.~%"))
+    (forall edge in (get-edges node)
+      (set-dest! edge (find-root (get-dest edge)))))
+  
+  (let iter ((count 0)
+             (updated '())
+             (open (list (NFA/get-start N))))
+    ;(format #t "null? ~A~%" (null? open))
+    (if (null? open)
+        (make-NFA (find-root (NFA/get-start N)) (NFA/get-accept N))
+        (let* ((current (car open))
+               (adjecents (then current -> get-edges => get-dest
+                                 %> (lambda (node)
+                                      (and (not (memq node updated))
+                                           (not (memq node open))))
+                                 -> list-uniq)))          
+          ;(format #t "Traversaled.~%")
+          ;(if (not (eq? current 
+                        ;(@nanobench
+                        ;(begin
+                        ;  (format #t "count: ~A~%" count)
+          ;                (find-root current)
+                        ;  )
+                        
+                        ;)
+                        
+          ;              ))
+              (update-edges! current);)
+          (iter (+ count 1)
+                (cons (car open) updated)
+                (cdr (append open adjecents)))))))
+
 (define (RE->NFA RE)
   (let ((tag (car RE)) (cont (cdr RE)))
     (cond ((eq? tag 'eps)      (make-eps-NFA))
@@ -256,6 +369,12 @@
           ((eq? tag 'kln)      (make-kleene-NFA (RE->NFA cont)))
           (else
             (error "wrong type of regular expression.")))))
+
+;(define (RE->String RE)
+;  (let ((tag (car RE)) (cont (cdr RE)))
+;    (cond ((eq? tag 'eps)      "e")
+;          ((eq? tag 'sig)         ))
+;    ))
 
 (define (serials->string srs)
   (join "," (map number->string srs)))
@@ -277,6 +396,8 @@
           r))))
 
 ;;; NFA->DFA : NFAMachine -> List<(NFANode . int)> -> DFAMachine
+;;;
+;;; just ugly stuff that you are not suppose to look into.
 (define (NFA->DFA N #!optional node-seq)
   ; alist : List<(NFANode . int)>
   (define alist
@@ -423,6 +544,8 @@
         (else
          (trace-root (car d)))))
 
+;;; merge-edges! DFANode
+;;; merge all the edge with same destination
 (define (merge-edges! d)
   (let ((alist '()))
     (forall edge in (get-edges d)
@@ -460,6 +583,7 @@
     D))
 
 ;;; DFA/forward-step : DFANode -> char -> Boolean | DFANode
+;;; a.k.a DFA/delta
 (define (DFA/forward-step d c)
   (call-with-current-continuation
     (lambda (K)
@@ -530,7 +654,13 @@
         (forall edge in (then pair -> car -> get-edges)
           (let ((to (cdr (assq (get-dest edge) sequence))))
             (format port "d~A -> d~A [label=\"~A\"];~%" from to
-                    (stringfy (get-char-set edge)))))))
+                    (stringfy (get-char-set edge)))))
+        (if (node-tag-get-attr (car pair) 'root-node #f)
+            (format port "d~a -> d~A [color=red];~%" from
+                (cdr (assq (node-tag-get-attr (car pair) 'root-node) sequence))))
+        
+        
+        ))
     
     (format #t "Done! ~%  * Close ouput port ... ")
     (format port "}")

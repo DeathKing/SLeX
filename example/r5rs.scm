@@ -1,3 +1,10 @@
+;;; R5RS.scm -- a Scheme tokenizer under R5RS definition
+;;;
+;;; 
+;;; Reference:
+;;;   + http://www.schemers.org/Documents/Standards/R5RS/r5rs.pdf
+;;;   + http://www.schemers.org/Documents/Standards/R5RS/HTML/r5rs-Z-H-10.html#%_chap_7
+
 (load-relative "../slex.scm")
 
 ; digit               -> [0-9]
@@ -35,42 +42,110 @@
 
 ; number -> num-2 | num-8 | num-10 | num-16
 
-;(define digit-R
-;  (list (cons 2  (sig '(#\0 #\1)))
-;        (cons 8  (sig '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7)))
-;        (cons 10 digit)
-;        (cons 16 (alt digit
-;                      (sig '(#\a #\b #\c #\d #\e #\f
-;                             #\A #\B #\C #\D #\E #\F))))))
+(define exponent-mark (sig* #\e #\s #\f #\d #\l #\E #\S #\F #\D #\L))
+(define sign          (alt eps (sig* #\+ #\-)))
+(define exactness     (alt eps (alt (exact "#i") (exact "#e"))))
 
-;(define radix-R
-;  (list (cons 2  (exact "#b"))
-;        (cons 8  (exact "#o"))
-;        (cons 10 (alt eps (exact "#d")))
-;        (cons 16 (exact "#x"))))
+(define digit-R
+  (list (cons 2  (sig* #\0 #\1))
+        (cons 8  (sig* #\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7))
+        (cons 10 digit)
+        (cons 16 (alt digit
+                      (sig*  #\a #\b #\c #\d #\e #\f
+                             #\A #\B #\C #\D #\E #\F)))))
 
-;(define exactness (alt eps (alt (exact "#i") (exact "#e"))))
-;(define sign (alt eps
-;                  (alt (sig #\+) (sig #\-))))
+(define radix-R
+  (list (cons 2  (exact-ci "#b"))
+        (cons 8  (exact-ci "#o"))
+        (cons 10 (alt eps (exact-ci "#d")))
+        (cons 16 (exact-ci "#x"))))
+
+(define suffix (alt eps (seq exponent-mark sign (rep+ (cdr (assq 10 digit-R))))))
+
+(define prefix-R
+  (mapall R in '(2 8 10 16)
+    (let ((radix (cdr (assq R radix-R))))
+      (cons R
+            (alt (seq radix exactness)
+                 (seq exactness radix))))))
+
+(define uinteger-R
+  (mapall R in '(2 8 10 16)
+    (cons R (seq (rep+ (cdr (assq R digit-R))) (exact "#*")))))
+
+(define decimal
+  (let ((uinteger (cdr (assq 10 uinteger-R)))
+        (digit-10 (cdr (assq 10 digit-R))))
+    (alt (seq uinteger suffix)
+         (seq (sig* #\.) (rep+ digit-10) (exact "#*") suffix)
+         (seq (rep+ digit-10) (sig* #\.) (kln* digit-10) (exact "#*") suffix)
+         (seq (rep+ digit-10) (exact "#+") (sig* #\.) (exact "#*") suffix))))
+
+(define ureal-R
+  (mapall R in '(2 8 10 16)
+    (let ((uinteger (cdr (assq R uinteger-R))))
+      (cons R
+            (alt uinteger
+                 (seq uinteger (sig* #\/) uinteger)
+                 decimal)))))
+
+(define real-R
+  (mapall R in '(2 8 10 16)
+    (cons R (seq sign (cdr (assq R ureal-R))))))
+  
+(define complex-R
+  (mapall R in '(2 8 10 16)
+    (let ((the-i (exact-ci "i"))
+          (real  (cdr (assq R real-R)))
+          (ureal (cdr (assq R ureal-R))))
+      (cons R
+            (alt real
+              (seq real (sig* #\@) real)
+              (seq real (sig* #\+ #\-) ureal the-i)
+              (seq real (sig* #\+ #\-))
+              (seq (sig* #\+ #\-) ureal the-i)
+              (seq (sig* #\+ #\-) the-i))))))
+
+(define num-R
+  (mapall R in '(2 8 10 16)
+    (cons R
+          (seq (cdr (assq R prefix-R)) (cdr (assq R complex-R))))))
+
+(define num
+  (apply alt (alist-get-values num-R)))
+;(alt (cdr (assq 2 num-R))))
 
 
-(define token  (alt boolean identifier character
+(define token  (alt boolean identifier character 
+                    num
                     (sig* #\() (sig* #\)) (exact "#(") (sig* #\')
                     (sig* #\`) (sig* #\,)  (sig* #\.)
                     (exact ",@")
                     ) )
 
+;(define token num)
+
 (define N (RE->NFA token))
 (NFA->DOT N "test2.dot")
 
-(define D (NFA->DFA N))
+; (define N (RE->NFA token))
+(define N2
+  (@nanobench (NFA/eps-elimination N)))
 
-(DFA->DOT (car D) "simple.dot")
+(NFA->DOT N2 "NFA-elimination.dot")
+(%exit)
 
-(forall pair in (cdr D)
-  (merge-edges! (car pair)))
+;(define D (NFA->DFA N))
 
-(DFA->DOT (car D) "merged.dot")
+;(DFA->DOT (car D) "simple.dot")
+
+;(forall pair in (cdr D)
+;  (merge-edges! (car pair)))
+
+;(DFA->DOT (car D) "merged.dot")
+
+
+
 
 ;(define alist (NFA/nodes->alist (car D)))
 ;(define fvec (NFA/alist->fvec alist))

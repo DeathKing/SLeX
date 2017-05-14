@@ -1,3 +1,9 @@
+;;; TIGER.scm -- a Tiger language tokenizer
+;;;
+;;; Reference:
+;;;   + https://www.lrde.epita.fr/~tiger/tiger.html
+;;;   + https://www.lrde.epita.fr/~tiger//tiger.pdf
+
 ;;;        letter ::= <slex:alphabet>
 ;;;         digit ::= <slex:digit>
 ;;; subsequent-id ::= <digit> | <letter> | _

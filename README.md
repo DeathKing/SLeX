@@ -16,6 +16,34 @@ Yet another lex analysor generator written in programming language Scheme.
 
 ## usage
 
+### basic academic concept and terminology
+
+A DFA M is a 5-tuple, (Q, Σ, δ, q0, F), consisting of
+
+  + a finite set of states (Q)
+  + a finite set of input symbols called the alphabet (Σ)
+  + a transition function (δ : Q × Σ → Q)
+  + an initial or start state (q0 ∈ Q)
+  + a set of accept states (F ⊆ Q)
+
+It is very useful to extend the transition function to receive a string as argument, thus we may define δ' as (where `$` stands for end-of-string):
+
+```haskell
+δ' : Q x Σ* -> Q
+δ' q $ = q
+δ' q (w :: ws) = δ (δ' q ws) w
+```
+
+Sometime, when defining a `scan` like function, we may find a partial transition function is useful also. A partial transition function also accept two argument as the normal transition function:
+
+```haskell
+partial-δ Q x Σ* x Σ* -> Σ* x Σ*
+partial-δ q xs $ = xs :: ""
+partial-δ q xs (w :: ws) =
+    if δ q w == fail then xs :: (w :: ws)
+    else partial-δ (δ q w) (append xs w) ws
+```
+
 ### primitives and combinators
 
 The constant `eps` returns a `epsilon`-RE which matches whatever you gave:
@@ -103,10 +131,11 @@ There are some pre-defined char-sets that you can use:
 
 ### use RE to match pattern
 
-`
-
+if a RE r is equivalent to a DFA M, thus, a String s ∈ L(r) iff δ q0 s ∈ F or partial-δ q0 s "" = f s "".  
 
 ### use RE to scan pattern
+
+`scan` function will return all the possible matches occures in text. 
 
 ### use RE to substitute pattern
 
