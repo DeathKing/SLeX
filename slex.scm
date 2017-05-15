@@ -767,3 +767,51 @@
                      ;(format #f "[~A-~A]" (car interval) (- (cdr interval) 1)))))))
     (lambda (cs) (map f cs))))
 
+(define (make-lex name)
+  (list 'lex name '() '()))
+
+(define (Lex/add-default-action! lex action)
+  (list-set! lex 3 action)
+  lex)
+
+(define (Lex/get-actions lex)
+  (list-ref lex 2))
+
+(define (Lex/add-action! lex pattern action)
+  (let ((compiled-DFA (RE/compile pattern)))
+    (list-set! lex 2
+               (append (Lex/get-actions lex) (list (cons compiled-DFA action))))
+    lex))
+
+(define-syntax define-lex
+  (syntax-rules (definition definition* rule)
+    ((_ id (rule exp ...))
+     (define id
+       ((%define-lex-rule-outter exp ...) (make-lex (quote id)))))
+    ((_ id (definition* defs ...) (rule rules ...))
+     (define id
+       (let* (defs ...)
+         ((%define-lex-rule-outter rules ...) (make-lex (quote id))))))
+    ((_ id (definition defs ...) (rule rules ...))
+     (define id
+       (let (defs ...)
+         ((%define-lex-rule-outter rules ...) (make-lex (quote id))))))))
+
+(define-syntax %define-lex-rule-outter
+  (syntax-rules (default)
+    ((_ (default exp))
+     (lambda (lex)
+       (Lex/add-default-action! lex exp)))
+    ((_ (pattern action) exp ...)
+     (lambda (lex)
+       (Lex/add-action! lex pattern action)
+       (%define-lex-rule-inner lex exp ...)))))
+
+(define-syntax %define-lex-rule-inner
+  (syntax-rules (default)
+    ((_ lex (default exp))
+     (Lex/add-default-action! lex exp))
+    ((_ lex (pattern action) exp ...)
+     (begin 
+       (Lex/add-action! lex pattern action)
+       (%define-lex-rule-inner lex exp ...)))))

@@ -1,15 +1,15 @@
-
+(load-relative "../slex.scm")
 
 ; Lex:
 ;     integer ::= <slex:digit> +
-;  identifier ::= <slex:letter> +
+;  identifier ::= <slex:alpha> +
 ;        func ::= + | -
 ;   delimiter ::= <slex:whitespace>
 
 (define-lex simple-L
   (definition
-    (integer     (kln+ (sig slex:digit)))
-    (identifier  (kln+ (sig slex:letter)))
+    (integer     (rep+ (sig slex:digit)))
+    (identifier  (rep+ (sig slex:alpha)))
     (func        (sig* #\+ #\-))
     (keyword-set (exact-ci "set!"))
     (delimiter   (sig slex:whitespace)))
@@ -18,8 +18,9 @@
     (integer     string->symbol)
     (identifier  string->symbol)
     (keyword-set (cons 'keyword 'set!))
-    (delimiter   ignore)
-    (else        error-handling)))
+    (func        (lambda (x) x))
+    ;(delimiter   ignore)
+    (default     (lambda (x) x)))) ;error-handling
   
 ;;; Grammar:
 ;;;     program ::= <stmt>*
@@ -29,29 +30,29 @@
 ;;;        func ::= + | -
 ;;;        atom ::= <identifier> | <integer>
 
-(define match-atom
+;(define match-atom
 
-	(let ((token (get-token! s0)))
-	  (if (is-atom? token)
-	      (cons 'atom token)
-	      (push-back! s0 token)))
-)
+;	(let ((token (get-token! s0)))
+;	  (if (is-atom? token)
+;	      (cons 'atom token)
+;	      (push-back! s0 token)))
+;)
 
-(define match-func
-  (let ((token (get-token! s0)))
-    (if (is-func? token)
-        (cons 'func token)
-        (push-back! s0 token))))
+;(define match-func
+;  (let ((token (get-token! s0)))
+;    (if (is-func? token)
+;        (cons 'func token)
+;        (push-back! s0 token))))
 
-(define match-keyword-set
-  (let ((token (get-token! s0)))
-    (if (equal? token (cons 'keyword 'set!))
-        token
-        (push-back! s0 token))))
+;(define match-keyword-set
+;  (let ((token (get-token! s0)))
+;    (if (equal? token (cons 'keyword 'set!))
+;        token
+;        (push-back! s0 token))))
 
-(define match-func-call
-  (let ))
+;(define match-func-call
+;  (let ))
 
-(define eval)
+;(define eval)
 
 
