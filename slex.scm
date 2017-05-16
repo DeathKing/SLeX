@@ -325,8 +325,6 @@
             node)))
   
   (define (update-edges! node)
-    ;(if (only-eps-edge? node)
-    ;    (format #t "update only eps edge.~%"))
     (forall edge in (get-edges node)
       (set-dest! edge (find-root (get-dest edge)))))
   
@@ -353,7 +351,7 @@
                         ;)
                         
           ;              ))
-              (update-edges! current);)
+          (update-edges! current);)
           (iter (+ count 1)
                 (cons (car open) updated)
                 (cdr (append open adjecents)))))))
@@ -592,28 +590,33 @@
             (K (get-dest edge))))
       (K #f))))
 
-;;; DFA/run : DFANode -> List<char> -> (Boolean List<char> List<char>)
+;;; DFA/run : DFANode -> String -> (Boolean String String)
 ;;;
 ;;; FIXME : we could implememnt stack as queue instead of queue
-(define (DFA/run D char-seq)
+(define (DFA/run D str)
   (let ((start (DFA/get-start D))
-        (accepts (DFA/get-accepts D)))
-    (let iter ((current-state start) (sequence char-seq) (stack '()))
-      (cond ((and (not (null? sequence))
-                  (DFA/forward-step current-state (car sequence))) =>
+        (accepts (DFA/get-accepts D))
+        (max-index (string-length str)))
+    (let iter ((current-state start) (index 0))
+      (cond ((and (< index max-index)
+                  (DFA/forward-step current-state (string-ref str index))) =>
              (lambda (next-state)
-               (iter next-state (cdr sequence) (cons (car sequence) stack))))
+               (iter next-state (+ 1 index))))
             (else
              (list (and (memq current-state accepts) #t)
-                   (reverse stack)
-                   sequence))))))
+                   (substring str 0 index)
+                   (substring str (+ 1 index) max-index)))))))
 
 (define (RE/compile RE)
   (car (NFA->DFA (RE->NFA RE))))
 
-(define (RE/matches? RE str)
+(define (RE/str-matches? RE str)
   (let ((D (RE/compile RE)))
     (car (DFA/run D (string->list str)))))
+
+; AIP changed RE must be a compiled-RE(DFA)
+(define (RE/matches? D str)
+  (car (DFA/run D (string->list str))))
 
 (define (RE/scan RE str)
   (let ((D (RE/compile RE)) (char-seq (string->list str)))
