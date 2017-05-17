@@ -12,15 +12,23 @@
     (identifier  (rep+ (sig slex:alpha)))
     (func        (sig* #\+ #\-))
     (keyword-set (exact-ci "set!"))
-    (delimiter   (sig slex:whitespace)))
+    (delimiter   (sig slex:whitespace))
+    
+    ; also action procedure    
+    (sv-token
+      (lambda (color-func)
+        (lambda (token-str start-at length)
+          (color-func token-str))))
+    
+    )
   
   (rule
-    (integer     string->symbol)
-    (identifier  string->symbol)
-    (keyword-set (cons 'keyword 'set!))
-    (func        (lambda (x) x))
-    ;(delimiter   ignore)
-    (default     (lambda (x) x)))) ;error-handling
+    (integer     (sv-token string-white))
+    (keyword-set (sv-token string-red))
+    (identifier  (sv-token string-green))
+    (func        (sv-token string-blue))
+    (delimiter   Lex/action:token-str)
+    (default     Lex/action:handle-error))) ;error-handling
   
 ;;; Grammar:
 ;;;     program ::= <stmt>*
@@ -55,4 +63,6 @@
 
 ;(define eval)
 
+(define s "12 34 asdfb set! +  \nasdf 13")
+(define L0 (Lex/instantiation simple-L s))
 

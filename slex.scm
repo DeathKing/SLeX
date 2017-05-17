@@ -17,6 +17,7 @@
 
 (load-option 'format)
 (load-relative "ext.scm")
+(load-relative "lib/sio.scm")
 
 ;;; Useful char set
 (define slex:digit       char-set:numeric)
@@ -771,7 +772,10 @@
     (lambda (cs) (map f cs))))
 
 (define (make-lex name)
-  (list 'lex name '() '()))
+  (list 'lex-proto name '() '()))
+
+(define (Lex/get-name lex)
+  (list-ref lex 1))
 
 (define (Lex/add-default-action! lex action)
   (list-set! lex 3 action)
@@ -818,3 +822,70 @@
      (begin 
        (Lex/add-action! lex pattern action)
        (%define-lex-rule-inner lex exp ...)))))
+
+(define (Lex/instantiation lex str)
+  (list 'lex-instance lex (make-sio str)))
+
+(define (Lex/eof? lex)
+  (SIO/eof? (list-ref lex 2)))
+
+
+(define (Lex/action:handle-error sio)
+  ;(SIO/inspect sio 60 3)
+  (error "no tokenize rule for current char -- " (SIO/peek-byte sio)))
+
+(define (Lex/action:ignore token-str start-at token-length)
+  #!unspecific)
+
+(define (Lex/action:token-str token-str start-at token-length)
+  token-str)
+
+(define make-match-result list)
+
+(define MatchResult/success? car)
+
+(define MatchResult/get-result cdr)
+
+(define DFA/partial-delta
+  (let ((not-found (make-match-result #f)))
+    (lambda (D sio)
+      (let ((start (DFA/get-start D))
+            (accepts (DFA/get-accepts D))
+            (start-offset (SIO/tell sio)))
+        (let iter ((current-state start) (count 0))
+          (cond ((SIO/eof? sio)
+                 (if (memq current-state accepts)
+                     (make-match-result #t 
+                                        (SIO/subcontent sio start-offset (SIO/tell sio))
+                                        start-offset count)
+                     (begin
+                       (SIO/push-back! sio count)
+                       not-found)))
+                ((DFA/forward-step current-state (SIO/get-byte! sio)) =>
+                 (lambda (next-state)
+                   (iter next-state (+ 1 count))))
+                ((memq current-state accepts)
+                 (SIO/push-back! sio 1)
+                 (make-match-result #t
+                                    (SIO/subcontent sio start-offset (SIO/tell sio))
+                                    start-offset count))
+                (else
+                 (SIO/push-back! sio (+ 1 count))
+                 not-found)))))))
+
+(define (LexInstance/get-actions lex-inst)
+  (Lex/get-actions (list-ref lex-inst 1)))
+
+(define (LexInstance/get-sio lex-inst)
+  (list-ref lex-inst 2))
+
+(define (LexInstance/get-token! lex-inst)
+  (call-with-current-continuation
+    (lambda (K)
+      (let ((sio (LexInstance/get-sio lex-inst)))
+        (forall rule in (LexInstance/get-actions lex-inst)
+          (let ((match-result (DFA/partial-delta (car rule) sio)))
+            (if (MatchResult/success? match-result)
+                (K (apply (cdr rule) (MatchResult/get-result match-result))))))
+        (K ((Lex/get-default-action lex-inst) sio))))))
+

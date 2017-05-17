@@ -10,7 +10,7 @@
                                 `Mbmmd'
 ``` 
 
-Yet another lex analysor generator written in programming language Scheme.
+Yet another lex analysor generator or naïve regular expression engine written in programming language Scheme.
 
 **Warning!** This project is still evolving, some API may change later. 
 

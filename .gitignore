@@ -4,4 +4,6 @@
 *.pdf
 *.log
 
+*.png
+
 pearls.rkt
