@@ -10,13 +10,179 @@
                                 `Mbmmd'
 ``` 
 
-Yet another lex analysor generator or naïve regular expression engine written in programming language Scheme.
+Yet another not-so-simple lex analysor generator and naïve regular expression engine written in programming language Scheme.
 
-**Warning!** This project is still evolving, some API may change later. 
+**Warning!** This project is still evolving, most of the API will be changed later. 
 
-## usage
+## Use SLeX as Regular expression engine
 
-### basic academic concept and terminology
+A [regular expression](https://en.wikipedia.org/wiki/Regular_expression) usually a sequence of characters that define a search pattern.
+
+### primitives and combinators
+
+The constant `eps` returns a ε-RE which matches whatever you gave:
+
+```scheme
+(define RE-eps (RE/compile eps))
+
+(RE/matches? RE-eps "")     ; ==> #t
+(RE/matches? RE-eps "asdf") ; ==> #t
+```
+
+Gavin a char-set, `sig` construct a RE that matches exact one char in that candidate set. On the other hand, `sig*` receives multiple chars as arguments and packed them as a char-set.
+
+```scheme
+(define RE-digit (RE/compile (sig slex:digit)))
+(define RE-digit (RE/compile (sig* #\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9)))
+
+(RE/matches? RE-digit "1")    ; ==> #t
+(RE/matches? RE-digit "a")    ; ==> #f
+(RE/matches? RE-digit "12")   ; ==> #f
+```
+
+There are some pre-defined char-sets that you can use:
+
+```scheme
+(define slex:digit       char-set:numeric)
+(define slex:upper-case  char-set:upper-case)
+(define slex:lower-case  char-set:lower-case)
+(define slex:alpha       char-set:alphabetic)
+(define slex:alphanum    char-set:alphanumeric)
+(define slex:whitespace  char-set:whitespace)
+(define slex:standard    char-set:standard)
+(define slex:graphic     char-set:graphic)
+```
+
+`exact` and `exact-ci` match exactly the given string, while `exact-ci` means case-insensitive:
+
+```scheme
+(define RE-switch0 (RE/compile (exact "switch0")))
+(define RE-switch0-ci (RE/compile (exact-ci "switch0")))
+
+(RE/matches? RE-switch0 "switch0")     ; ==> #t
+(RE/matches? RE-switch0 "SWITCH0")     ; ==> #f
+(RE/matches? RE-switch0-ci "sWiTCh0")  ; ==> #t
+```
+
+`alt` makes an alternation of two or more REs:
+
+```scheme
+(define RE-peculiar-identifier (RE/compile (alt (sig* #\+ #\-) (exact "...")))
+
+(RE/matches? RE-peculiar-identifier "+")     ; ==> #t
+(RE/matches? RE-peculiar-identifier "...")   ; ==> #t
+(RE/matches? RE-peculiar-identifier "+..")   ; ==> #f 
+```
+
+`seq` connects two or more REs:
+
+```scheme
+; equivalent to (exact "...")
+(define RE-ldots (RE/compile (seq (sig* #\.) (sig* #\.) (sig* #\.))))
+
+(RE/matches? RE-ldots "...")   ; ==> #t
+(RE/matches? RE-ldots ".")     ; ==> #f
+(RE/matches? RE-ldots "....")  ; ==> #f
+```
+
+`rep?` means that the RE should appear zero or exact one time:
+
+```scheme
+; positive-integer may have a plus sign prefix
+(define RE-positive-integer-revised
+        (RE/compile (seq (rep? (sig* #\+)) positive-integer)))
+
+(RE/matches? RE-positive-integer-revised "+012345")   ; ===> #t
+```
+
+`kln*` creates a so called **Kleene Closure** of a RE:
+
+```scheme
+; for simplicity, we suppose that integer could start with '0'
+(define RE-positive-integer (RE/compile (kln* slex:digit)))
+
+(RE/matches? RE-positive-integer "123456")   ; ===> #t
+(RE/matches? RE-positive-integer "012345")   ; ===> #t
+(RE/matches? RE-positive-integer "0.1234")   ; ===> #f
+``` 
+
+### use RE to match pattern
+
+if a RE r is equivalent to a DFA M, thus, a String s ∈ L(r) iff δ q0 s ∈ F or partial-δ q0 s "" = f s "".  
+
+### use RE to scan pattern
+
+`scan` function will return all the possible matches occures in text. 
+
+### use RE to substitute pattern
+
+## Use SLeX to generate token analysor
+
+To analysis the token stream, you should define a lexer with `define-lex` special form and then add definitions and rules to it. The `define-lex` special form has following forms:
+
+```scheme
+(define-lex <lex-id> {<definition-exps>} <rule-exps>)
+
+;;; where
+;;;   <definition-exps> ::= (<def-type> <def-clause> ... )
+;;;   <def-type>    ::= definitions | definitions*
+;;;   <def-clause>  ::= (<identifier> <scheme-exp>)
+;;;
+;;;   <rule-exps>   ::= (rule <rule-clause> ... {<default-exp>})
+;;;   <rule-clause> ::= (<pattern> <action>)
+;;;   <pattern>     ::= <scheme-exp>
+;;;   <action>      ::= <scheme-exp>
+;;;   <default-exp> ::= (default <scheme-exp>)
+```
+
+The semantic of `define-lex` could be described as:
+
+> the special form `define-lex` defines a named lexer under a lexical enviornment expanded by keyword `definition` (using `let`) or `definitions` (using `let*`), whose pattern-action pairs are specified by keyword `rule`, where the `<pattern>` of `<rule-clause>` must be a expression which evaluated to be a RE-IR or RE-string, and the `<action>` of`<rule-clause>` must be a expression which evaluated to be a `self-evaluating` data or a tripple arugments procedure. 
+
+This may be confusing, let's take `example/simple-lang.scm` as example:
+
+```scheme
+(define-lex simple-L
+  (definition
+    (integer     (rep+ (sig slex:digit)))
+    (identifier  (rep+ (sig slex:alpha)))
+    (func        (sig* #\+ #\-))
+    (keyword-set (exact-ci "set!"))
+    (delimiter   (sig slex:whitespace))
+    
+    ; also action procedure    
+    (sv-token
+      (lambda (color-func)
+        (lambda (token-str start-at length)
+          (color-func token-str)))))
+  
+  (rule
+    (integer     (sv-token string-white))
+    (keyword-set (sv-token string-red))
+    (identifier  (sv-token string-green))
+    (func        (sv-token string-blue))
+    (delimiter   Lex/action:token-str)
+    (default     Lex/action:handle-error)))
+```
+
+
+## Theoretical detail of SLeX
+
+### Roadmap
+
+```text
+ ~~~~~~~~~~~~~
+   ^      String                (DFANode . List<DFANode>)
+   |       +\----+                    /
+  TODO     |  RE |                 DFA
+   |       +--+--+                  ^
+   v    Parse |                     | NFA->DFA
+ ~~~~~~~~~~~~ v                     | 
+            RE IR ---------------> NFA
+             /        RE->NFA         \
+    (Symbol . Char-set | RE)   (NFANode . NFANode)        
+
+```
 
 A DFA M is a 5-tuple, (Q, Σ, δ, q0, F), consisting of
 
@@ -44,156 +210,3 @@ partial-δ q xs (w :: ws) =
     else partial-δ (δ q w) (append xs w) ws
 ```
 
-### primitives and combinators
-
-The constant `eps` returns a `epsilon`-RE which matches whatever you gave:
-
-```scheme
-(RE/matches? eps "")     ; ==> #t
-(RE/matches? eps "asdf") ; ==> #t
-```
-
-Gavin a char-set, `sig` construct a RE that matches exact one char in that candidate set. On the other hand, `sig*` receives multiple chars as arguments and packed them as a char-set.
-
-```scheme
-(define digit (sig slex:digit))
-(define digit (sig* #\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9))
-
-(RE/matches? digit "1")    ; ==> #t
-(RE/matches? digit "a")    ; ==> #f
-(RE/matches? digit "12")   ; ==> #f
-```
-
-There are some pre-defined char-sets that you can use:
-
-```scheme
-(define slex:digit       char-set:numeric)
-(define slex:upper-case  char-set:upper-case)
-(define slex:lower-case  char-set:lower-case)
-(define slex:alpha       char-set:alphabetic)
-(define slex:alphanum    char-set:alphanumeric)
-(define slex:whitespace  char-set:whitespace)
-(define slex:standard    char-set:standard)
-(define slex:graphic     char-set:graphic)
-```
-
-`exact` and `exact-ci` match exactly the given string, while `exact-ci` means case-insensitive:
-
-```scheme
-(define switch0 (exact "switch0"))
-(define switch0-ci (exact-ci "switch0"))
-
-(RE/matches? switch0 "switch0")     ; ==> #t
-(RE/matches? switch0 "SWITCH0")     ; ==> #f
-(RE/matches? switch0-ci "sWiTCh0")  ; ==> #t
-```
-
-`alt` makes an alternation of two or more REs:
-
-```scheme
-(define peculiar-identifier (alt (sig* #\+ #\-) (exact "..."))
-
-(RE/matches? peculiar-identifier "+")     ; ==> #t
-(RE/matches? peculiar-identifier "...")   ; ==> #t
-(RE/matches? peculiar-identifier "+...")  ; ==> #f 
-```
-
-`seq` connects two or more REs:
-
-```scheme
-; equivalent to (exact "...")
-(define ldots (seq (sig* #\.) (sig* #\.) (sig* #\.))) 
-
-(RE/matches? ldots "...")   ; ==> #t
-(RE/matches? ldots ".")     ; ==> #f
-(RE/matches? ldots "....")  ; ==> #f
-```
-
-`rep?` means that the RE should appear zero or exact one time:
-
-```scheme
-; positive-integer may have a plus sign prefix
-(define positive-integer-revised (seq (rep? (sig* #\+)) positive-integer))
-
-(RE/matches? positive-integer-revised "+012345")   ; ===> #t
-```
-
-`kln*` creates a so called **Kleene Closure** of a RE:
-
-```scheme
-; for simplicity, we suppose that integer could start with '0'
-(define positive-integer (kln* slex:digit))
-
-(RE/matches? positive-integer "123456")   ; ===> #t
-(RE/matches? positive-integer "012345")   ; ===> #t
-(RE/matches? positive-integer "0.1234")   ; ===> #f
-``` 
-
-### use RE to match pattern
-
-if a RE r is equivalent to a DFA M, thus, a String s ∈ L(r) iff δ q0 s ∈ F or partial-δ q0 s "" = f s "".  
-
-### use RE to scan pattern
-
-`scan` function will return all the possible matches occures in text. 
-
-### use RE to substitute pattern
-
-### token analysis
-
-To analysis the token stream, you should define a lexer with `define-lex` special form and add rules to it:
-
-```scheme
-(define-lex S
-  ((sig #\( #\) #\+ #\-) id)
-  ((exact-ci "set!") (cons 'keyword 'set!)
-  ((kleen+ slex:letter) string->symbol)
-  ((kleen+ slex:digit) string->number)
-  ((apply sig slex:whitespace) ignore)
-  (else error-handling))
-```
-
-
-```scheme
-(define s0 (S standard-input))
-
-(define exp-streem (make-parse-stream (get-lex-stream s0)))
-
-(let loop ((sigma `((+ . ,fx+) (- . ,fx-))
-           (exp exp-streem))
-  (if (null? exp)
-      '()
-      (loop (eval (head exp) sigma)
-            (tail exp))))
-```
-
-```text
-Lex:
-integer ::= <slex:digit> +
-identifier ::= <slex:letter> +
-delimiter ::= <slex:whitespace>
-
-Grammar
-program ::= <stmt>*
-stmt ::= (set! <identifier> <exp>) | <exp>
-exp ::= <func-call> | <atom>
-func-call ::= (<func> <exp> <exp>)
-func ::= + | -
-atom ::= <identifier> | <integer>
-```
-
-## Roadmap
-
-```text
- ~~~~~~~~~~~~~
-   ^      String                (DFANode . List<DFANode>)
-   |       +\----+                    /
-  TODO     |  RE |                 DFA
-   |       +--+--+                  ^
-   v    Parse |                     | NFA->DFA
- ~~~~~~~~~~~~ v                     | 
-            RE IR ---------------> NFA
-             /        RE->NFA         \
-    (Symbol . Char-set | RE)   (NFANode . NFANode)        
-
-```
