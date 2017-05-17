@@ -14,7 +14,7 @@
 ;;;   punctuation ::= , | : | ; | ( | ) | [ | ] | { | } | . | + | - |
 ;;;                   * | / | = | <> | < | <= | > | >= | & | \ | :=
 
-(define-lex S
+(define-lex tiger-L
   (definition
     (letter        (sig* slex:alphabet))
     (digit         (sig* slex:digit))

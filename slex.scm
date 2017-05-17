@@ -16,8 +16,13 @@
 ;;; 2017-04-08
 
 (load-option 'format)
-(load-relative "ext.scm")
+
+(load-relative "lib/util.scm")
 (load-relative "lib/sio.scm")
+(load-relative "lib/list.scm")
+(load-relative "lib/string.scm")
+(load-relative "lib/charset.scm")
+(load-relative "lib/mirror-table.scm")
 
 ;;; Useful char set
 (define slex:digit       char-set:numeric)
@@ -29,7 +34,7 @@
 (define slex:standard    char-set:standard)
 (define slex:graphic     char-set:graphic)
 
-;;; Primitive RE constructor
+;;; Primitive RE constructor or RE IR
 (define eps (cons 'eps '()))
 
 (define (sig cs)
@@ -278,25 +283,6 @@
         (sort result <)
         (iter (cdr open) (cons (cdr (assq (car open) alist)) result)))))
 
-
-(define (nanobench desc exp)
-  (format #t "** [Nanobench] **~%")
-  (format #t "  * Expression: ~s~%" desc)
-  (with-timings exp
-    (lambda (run-time gc-time real-time)
-      (let ((gc-time   gc-time);(internal-time/ticks->seconds gc-time))
-            (cpu-time  run-time);(internal-time/ticks->seconds run-time))
-            (real-time real-time)) ;(internal-time/ticks->seconds real-time))
-        (format #t " ---------------------------------------------------------~%")
-        (format #t "  *  run-time: ~A~%" run-time)
-        (format #t "  *   gc-time: ~A~%" gc-time)
-        (format #t "  * real-time: ~A~%" real-time)))))
-
-(define-syntax @nanobench
-  (syntax-rules ()
-    ((_ exp)
-     (nanobench (quote exp) (lambda () exp)))))
-
 (define (NFA/eps-elimination N)
   (define id (lambda (x) x))
   
@@ -341,18 +327,7 @@
                                       (and (not (memq node updated))
                                            (not (memq node open))))
                                  -> list-uniq)))          
-          ;(format #t "Traversaled.~%")
-          ;(if (not (eq? current 
-                        ;(@nanobench
-                        ;(begin
-                        ;  (format #t "count: ~A~%" count)
-          ;                (find-root current)
-                        ;  )
-                        
-                        ;)
-                        
-          ;              ))
-          (update-edges! current);)
+          (update-edges! current)
           (iter (+ count 1)
                 (cons (car open) updated)
                 (cdr (append open adjecents)))))))
@@ -781,6 +756,9 @@
   (list-set! lex 3 action)
   lex)
 
+(define (Lex/get-default-action lex)
+  (list-ref lex 3))
+
 (define (Lex/get-actions lex)
   (list-ref lex 2))
 
@@ -823,11 +801,6 @@
        (Lex/add-action! lex pattern action)
        (%define-lex-rule-inner lex exp ...)))))
 
-(define (Lex/instantiation lex str)
-  (list 'lex-instance lex (make-sio str)))
-
-(define (Lex/eof? lex)
-  (SIO/eof? (list-ref lex 2)))
 
 
 (define (Lex/action:handle-error sio)
@@ -873,11 +846,23 @@
                  (SIO/push-back! sio (+ 1 count))
                  not-found)))))))
 
-(define (LexInstance/get-actions lex-inst)
-  (Lex/get-actions (list-ref lex-inst 1)))
+(define (Lex/instantiation lex str)
+  (list 'lex-instance lex (make-sio str)))
+
+(define (LexInstance/get-proto-lex lex-inst)
+  (list-ref lex-inst 1))
 
 (define (LexInstance/get-sio lex-inst)
   (list-ref lex-inst 2))
+
+(define (LexInstance/eof? lex-inst)
+  (SIO/eof? (LexInstance/get-sio lex-inst)))
+
+(define (LexInstance/get-actions lex-inst)
+  (Lex/get-actions (LexInstance/get-proto-lex lex-inst)))
+
+(define (LexInstance/get-default-action lex-inst)
+  (Lex/get-default-action (LexInstance/get-proto-lex lex-inst)))
 
 (define (LexInstance/get-token! lex-inst)
   (call-with-current-continuation
@@ -887,5 +872,4 @@
           (let ((match-result (DFA/partial-delta (car rule) sio)))
             (if (MatchResult/success? match-result)
                 (K (apply (cdr rule) (MatchResult/get-result match-result))))))
-        (K ((Lex/get-default-action lex-inst) sio))))))
-
+        (K ((LexInstance/get-default-action lex-inst) sio))))))

@@ -7,38 +7,42 @@
 
 (load-relative "../slex.scm")
 
-; digit               -> [0-9]
-; letter              -> [a-zA-Z]
-; special-initial     -> ! | $ | % | & | * | / | : | < | = | > | ? | ^ | _ | ~
-; special-subsequent  -> + | - | . | @
-; peculiar-identifier -> + | - | ...
-; initial             -> <letter> | <special-initial>
-; subsequent          -> <initial | <digit> | <special-subsequent>
-; identifier          -> <initial> <subsequent>* | <peculiar-identifier>
+(define-lex r5rs-L
+  (definition*
+    
+    ; digit               -> [0-9]
+    ; letter              -> [a-zA-Z]
+    ; special-initial     -> ! | $ | % | & | * | / | : | < | = | > | ? | ^ | _ | ~
+    ; special-subsequent  -> + | - | . | @
+    ; peculiar-identifier -> + | - | ...
+    (digit               (sig slex:digit))
+    (letter              (sig slex:alpha))
+    (special-initial     (sig* #\! #\$ #\% #\& #\* #\/ #\: 
+                               #\< #\= #\> #\? #\^ #\_ #\~))
+    (special-subsequent  (sig* #\+ #\- #\. #\@))
+    (peculiar-identifier (alt (sig* #\+ #\-) (exact "...")))
 
-(define digit  (sig slex:digit))
-(define letter (sig slex:alpha))
-(define special-initial (sig* #\! #\$ #\% #\& #\* #\/ #\: 
-                              #\< #\= #\> #\? #\^ #\_ #\~))
-(define special-subsequent  (sig* #\+ #\- #\. #\@))
-(define peculiar-identifier (alt (sig* #\+ #\-) (exact "...")))
-
-(define initial    (alt letter special-initial))
-(define subsequent (alt initial digit special-subsequent))
-(define identifier (alt (seq initial (kln* subsequent))
-                        peculiar-identifier))
-
-; boolean        -> #t | #f
-; character      -> #\ <any character> | #\ <character-name>
-; character-name -> space | newline
-; string         -> " <string-element>* "
-; string-element -> <any character other than " or \> | \" | \\
-(define boolean (alt (exact-ci "#t") (exact-ci "#f")))
-(define character-name (alt (exact-ci "space") (exact-ci "newline")))
-(define character
-  (let ((hash-slash (seq (sig* #\#) (sig* #\\))))
-    (alt (seq hash-slash (sig slex:alphanum))
-         (seq hash-slash character-name))))
+    ; initial             -> <letter> | <special-initial>
+    ; subsequent          -> <initial | <digit> | <special-subsequent>
+    ; identifier          -> <initial> <subsequent>* | <peculiar-identifier>
+    (initial             (alt letter special-initial))
+    (subsequent          (alt initial digit special-subsequent))
+    (identifier          (alt (seq initial (kln* subsequent))
+                              peculiar-identifier))
+    
+    ; boolean        -> #t | #f
+    ; character      -> #\ <any character> | #\ <character-name>
+    ; character-name -> space | newline
+    ; string         -> " <string-element>* "
+    ; string-element -> <any character other than " or \> | \" | \\
+    (boolean             (alt (exact-ci "#t") (exact-ci "#f")))
+    (character-name      (alt (exact-ci "space") (exact-ci "newline")))
+    (character
+      (let ((hash-slash (seq (sig* #\#) (sig* #\\))))
+        (alt (seq hash-slash (sig slex:alphanum))
+             (seq hash-slash character-name))))
+    
+    ))
 
 ; number -> num-2 | num-8 | num-10 | num-16
 

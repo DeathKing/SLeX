@@ -18,9 +18,7 @@
     (sv-token
       (lambda (color-func)
         (lambda (token-str start-at length)
-          (color-func token-str))))
-    
-    )
+          (color-func token-str)))))
   
   (rule
     (integer     (sv-token string-white))
@@ -63,6 +61,9 @@
 
 ;(define eval)
 
-(define s "12 34 asdfb set! +  \nasdf 13")
+(define s "12 34 asdfb set! + $ \nasdf 13")
 (define L0 (Lex/instantiation simple-L s))
+
+(until (LexInstance/eof? L0)
+  (display (LexInstance/get-token! L0)))
 

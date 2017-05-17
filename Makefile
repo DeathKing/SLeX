@@ -1,2 +1,2 @@
 clean:
-    rm *.dot *.aux *.log *.tex *.pdf
+	rm *.dot *.aux *.log *.tex *.pdf
