@@ -1,4 +1,6 @@
-<img align="center" src="./assets/logo.png" alt="SLeX Logo">
+<p align="center">
+  <img width="90%" src="./assets/logo.png" alt="SLeX Logo">
+</p>
 
 Yet another not-so-simple lex analysor generator and naïve regular expression engine written in programming language Scheme.
 
