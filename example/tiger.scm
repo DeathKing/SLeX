@@ -1,8 +1,16 @@
 ;;; TIGER.scm -- a Tiger language tokenizer
 ;;;
-;;; Reference:
-;;;   + https://www.lrde.epita.fr/~tiger/tiger.html
-;;;   + https://www.lrde.epita.fr/~tiger//tiger.pdf
+;;; ** Reference **
+;;;
+;;;   For language specification:
+;;;
+;;;       + https://www.lrde.epita.fr/~tiger/tiger.html
+;;;       + https://www.lrde.epita.fr/~tiger/tiger.pdf
+;;;
+;;;   For testcase:
+;;;
+;;;       + https://www.cs.princeton.edu/~appel/modern/testcases/
+;;;
 
 ;;;        letter ::= <slex:alphabet>
 ;;;         digit ::= <slex:digit>
@@ -33,9 +41,4 @@
     (id
      (lambda (s) (cons 'id s)))
     (punctuation
-     (lambda (s) (cons 'punctuation (string->symbol s))))))
-
-(rules ...) =>
-(let ((M (new-empty-lex)))
-  (LeX/add-rule! id proc)
-  (LeX/finalized! M))
+     (lambda (token-str start-at) (cons (string->symbol token-str) '())))))

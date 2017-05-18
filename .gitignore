@@ -6,4 +6,7 @@
 
 *.png
 
-pearls.rkt
+.DS_Store
+
+example/tiger-program
+

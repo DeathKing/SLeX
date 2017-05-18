@@ -43,6 +43,12 @@
 (define (sig* . css)
   (sig (apply char-set css)))
 
+(define (sig-co cs)
+  (cons 'sig (char-set-invert cs)))
+
+(define (sig*-co . css)
+  (cons 'sig (char-set-invert (apply char-set css))))
+
 (define (exact s)     (cons 'exact s))
 (define (exact-ci s)  (cons 'exact-ci s))
 
@@ -78,7 +84,7 @@
 
 (define (Node/set-attr! node attr value)
   (let ((attrs (car node)))
-    (cond ((assq attr tag) =>
+    (cond ((assq attr attrs) =>
            (lambda (entry)
              (set-cdr! entry value)))
           (set-car! node (cons (cons attr value) attr)))))
@@ -94,12 +100,12 @@
 (define (Edge/set-dest! edge dest)    (set-cdr! edge dest))
 (define (Node/eps? edge)         (eq? 'eps (Edge/get-charset edge)))
 
-; add-edge! : char-set -> FANode -> FANode -> #unspecific
-(define (add-edge! charset from dest)
+; Node/add-edge! : char-set -> FANode -> FANode -> #unspecific
+(define (Node/add-edge! charset from dest)
   (set-cdr! from (cons (make-edge charset dest) (Node/get-edges from))))
 
-; add-eps-edge! : FANode -> FANode -> #unspecific
-(define (add-eps-edge! from dest)
+; Node/add-eps-edge! : FANode -> FANode -> #unspecific
+(define (Node/add-eps-edge! from dest)
   (set-cdr! from (cons (make-eps-edge dest) (Node/get-edges from))))
 
 (define (Node/only-eps-edge? node)
@@ -123,6 +129,23 @@
      -> (lambda (e) (map Edge/get-charset e))
      -> list-flatten
      -> (lambda (l) (apply char-set-union l))))
+
+;;; Node/merge-edges! DFANode
+;;; merge all the edge with same destination
+(define (Node/merge-edges! d)
+  (let* ((alist '())
+         (edges (Node/get-edges d))
+         (dests (map Edge/get-dest edges)))
+    (if (not (eq? (length dests) (length (list-uniq dests))))
+        (begin
+          (forall edge in edges
+            (let ((dest (Edge/get-dest edge)) (charset (Edge/get-charset edge)))
+              (cond ((assq dest alist) =>
+                     (lambda (entry)
+                      (set-cdr! entry (char-set-union charset (cdr entry)))))
+                    (else
+                      (set! alist (cons (cons dest charset) alist))))))
+          (set-cdr! d (alist-reverse-all-pairs alist))))))
 
 ; Node/neighbours : FANode -> List<FANode>
 ; FIXME: list-flatten
@@ -148,7 +171,7 @@
 (define (make-eps-NFA)
   (let ((start (make-node))
         (accept (make-node)))
-    (add-eps-edge! start accept)
+    (Node/add-eps-edge! start accept)
     (make-NFA start accept)))
 
 ; make-just-accept-NFA : void -> (NFANode, NFANode)
@@ -161,7 +184,7 @@
   (if (null? charset)
       (make-eps-NFA)
       (let ((start (make-node)) (accept (make-node)))
-        (add-edge! charset start accept)
+        (Node/add-edge! charset start accept)
         (make-NFA start accept))))
 
 ; make-sig-NFA : List<char> -> (NFANode, NFANode)
@@ -171,7 +194,7 @@
       (let* ((N (make-exact-NFA (cdr char-seq)))
              (accept (NFA/get-accept N))
              (start (make-node)))
-        (add-edge! (char-set (car char-seq)) start (NFA/get-start N))
+        (Node/add-edge! (char-set (car char-seq)) start (NFA/get-start N))
         (make-NFA start accept))))
 
 ; make-exact-ci-NFA : List<char> -> (NFANode, NFANode)
@@ -183,7 +206,7 @@
              (N (make-exact-ci-NFA (cdr char-seq)))
              (accept (NFA/get-accept N))
              (start1 (NFA/get-start N)))
-        (add-edge! (if (char-alphabetic? c)
+        (Node/add-edge! (if (char-alphabetic? c)
                        (char-set (char-upcase c) (char-downcase c))
                        (char-set c))
                    start
@@ -195,8 +218,8 @@
   (let ((start (make-node))
         (accept (make-node)))
     (forall n in Ns
-      (add-eps-edge! start (NFA/get-start n))
-      (add-eps-edge! (NFA/get-accept n) accept))
+      (Node/add-eps-edge! start (NFA/get-start n))
+      (Node/add-eps-edge! (NFA/get-accept n) accept))
     (make-NFA start accept)))
 
 (define (make-seq-NFA . N)
@@ -204,16 +227,16 @@
       (car N)
       (let ((head (car N))
             (rest (apply make-seq-NFA (cdr N))))
-        (add-eps-edge! (NFA/get-accept head) (NFA/get-start rest))
+        (Node/add-eps-edge! (NFA/get-accept head) (NFA/get-start rest))
         (make-NFA (NFA/get-start head) (NFA/get-accept rest)))))
 
 (define (make-kleene-NFA N)
   (let ((start (make-node))
         (accept (make-node)))
-    (add-eps-edge! start accept)
-    (add-eps-edge! start (NFA/get-start N))
-    (add-eps-edge! (NFA/get-accept N) accept)
-    (add-eps-edge! (NFA/get-accept N) (NFA/get-start N))
+    (Node/add-eps-edge! start accept)
+    (Node/add-eps-edge! start (NFA/get-start N))
+    (Node/add-eps-edge! (NFA/get-accept N) accept)
+    (Node/add-eps-edge! (NFA/get-accept N) (NFA/get-start N))
     (make-NFA start accept)))  
 
 ;;; NFA/eps-closres : List<NFANode> -> List<NFANode>
@@ -295,12 +318,11 @@
   (define (find-root node)
     (cond ((Node/get-attr node 'root-node #f) => id)
           ((Node/terminated? node)
-           (format #t "terminated node.~%")
+           ;(format #t "terminated node.~%")
            (begin
              (Node/set-attr! node 'root-node node)
              node))
           ((Node/only-eps-edge? node)
-           ;(format #t "only eps edge.~%")
            (if (Node/get-attr node 'loop-token #f)
                (cond ((Node/get-attr node 'root-node #f) => id)
                      (else
@@ -447,10 +469,10 @@
                                ((not (empty-char-set? sigma3))))
                       (cond ((rassoc d1-epsclo-sr map-table) =>
                              (lambda (dest-dfa-node)
-                               (add-edge! sigma3 current-dfa-node (car dest-dfa-node))))
+                               (Node/add-edge! sigma3 current-dfa-node (car dest-dfa-node))))
                             (else
                              (let ((dest-dfa-node (make-node)))
-                               (add-edge! sigma3 current-dfa-node dest-dfa-node)
+                               (Node/add-edge! sigma3 current-dfa-node dest-dfa-node)
                                (set! map-table (cons (cons dest-dfa-node d1-epsclo-sr) map-table))
                                (set! open (append open (list (cons d1-epsclo d1-epsclo-sr))))))))
                     
@@ -465,10 +487,10 @@
                                ((not (empty-char-set? sigma3))))
                       (cond ((rassoc d2-epsclo-sr map-table) =>
                              (lambda (dest-dfa-node)
-                               (add-edge! sigma3 current-dfa-node (car dest-dfa-node))))
+                               (Node/add-edge! sigma3 current-dfa-node (car dest-dfa-node))))
                             (else
                              (let ((dest-dfa-node (make-node)))
-                               (add-edge! sigma3 current-dfa-node dest-dfa-node)
+                               (Node/add-edge! sigma3 current-dfa-node dest-dfa-node)
                                (set! map-table (cons (cons dest-dfa-node d2-epsclo-sr) map-table))
                                (set! open (append open (list (cons d2-epsclo d2-epsclo-sr))))))))))
                   (iter (cdr open))))))))
@@ -524,19 +546,6 @@
         (else
          (trace-root (car d)))))
 
-;;; Node/merge-edges! DFANode
-;;; merge all the edge with same destination
-(define (Node/merge-edges! d)
-  (let ((alist '()))
-    (forall edge in (Node/get-edges d)
-      (let ((dest (Edge/get-dest edge)) (charset (Edge/get-charset edge)))
-        (cond ((assq dest alist) =>
-               (lambda (entry)
-                 (set-cdr! entry (char-set-union charset (cdr entry)))))
-              (else
-               (set! alist (cons (cons dest charset) alist))))))
-    (set-cdr! d (alist-reverse-all-pairs alist))))
-
 (define (DFA/simplify! D alist fvec)
   (let* (;(alist (FA/traverse-sequence D))
          ;(fvec (NFA/alist->fvec alist))
@@ -587,10 +596,38 @@
             (else
              (list (and (memq current-state accepts) #t)
                    (substring str 0 index)
-                   (substring str (+ 1 index) max-index)))))))
+                   (substring str index max-index)))))))
 
+(define DFA/partial-delta
+  (let ((not-found (make-match-result #f)))
+    (lambda (D sio)
+      (let ((start (DFA/get-start D))
+            (accepts (DFA/get-accepts D))
+            (start-offset (SIO/tell sio)))
+        (let iter ((current-state start) (count 0))
+          (cond ((SIO/eof? sio)
+                 (if (memq current-state accepts)
+                     (make-match-result #t 
+                                        (SIO/subcontent sio start-offset (SIO/tell sio))
+                                        start-offset)
+                     (begin
+                       (SIO/push-back! sio count)
+                       not-found)))
+                ((DFA/forward-step current-state (SIO/get-byte! sio)) =>
+                 (lambda (next-state)
+                   (iter next-state (+ 1 count))))
+                ((memq current-state accepts)
+                 (SIO/push-back! sio 1)
+                 (make-match-result #t
+                                    (SIO/subcontent sio start-offset (SIO/tell sio))
+                                    start-offset))
+                (else
+                 (SIO/push-back! sio (+ 1 count))
+                 not-found)))))))
+
+;;; FIXME : more opitimization should be down here
 (define (RE/compile RE)
-  (car (NFA->DFA (RE->NFA RE))))
+  (car (NFA->DFA (NFA/eps-elimination (RE->NFA RE)))))
 
 (define (RE/str-matches? RE str)
   (let ((D (RE/compile RE)))
@@ -598,10 +635,18 @@
 
 ; AIP changed RE must be a compiled-RE(DFA)
 (define (RE/matches? D str)
-  (car (DFA/run D (string->list str))))
+  (car (DFA/run D str)))
 
-(define (RE/scan RE str)
-  (let ((D (RE/compile RE)) (char-seq (string->list str)))
+;;; find first occurence of pattern D
+;;; a.k.a RE/find-first 
+(define (RE/find D str)
+  '()
+  )
+
+;;;
+;;; a.k.a RE/find-all
+(define (RE/scan D str)
+  (let ((char-seq (string->list str)))
     (let iter ((run (DFA/run D char-seq)) (result '()))
       (if (and (null? (list-ref run 1)) (null? (list-ref run 2)))
           (reverse result)
@@ -813,10 +858,10 @@
   ;(SIO/inspect sio 60 3)
   (error "no tokenize rule for current char -- " (SIO/peek-byte sio)))
 
-(define (Lex/action:ignore token-str start-at token-length)
+(define (Lex/action:ignore token-str start-at)
   #!unspecific)
 
-(define (Lex/action:token-str token-str start-at token-length)
+(define (Lex/action:token-str token-str start-at)
   token-str)
 
 (define make-match-result list)
@@ -825,32 +870,7 @@
 
 (define MatchResult/get-result cdr)
 
-(define DFA/partial-delta
-  (let ((not-found (make-match-result #f)))
-    (lambda (D sio)
-      (let ((start (DFA/get-start D))
-            (accepts (DFA/get-accepts D))
-            (start-offset (SIO/tell sio)))
-        (let iter ((current-state start) (count 0))
-          (cond ((SIO/eof? sio)
-                 (if (memq current-state accepts)
-                     (make-match-result #t 
-                                        (SIO/subcontent sio start-offset (SIO/tell sio))
-                                        start-offset count)
-                     (begin
-                       (SIO/push-back! sio count)
-                       not-found)))
-                ((DFA/forward-step current-state (SIO/get-byte! sio)) =>
-                 (lambda (next-state)
-                   (iter next-state (+ 1 count))))
-                ((memq current-state accepts)
-                 (SIO/push-back! sio 1)
-                 (make-match-result #t
-                                    (SIO/subcontent sio start-offset (SIO/tell sio))
-                                    start-offset count))
-                (else
-                 (SIO/push-back! sio (+ 1 count))
-                 not-found)))))))
+
 
 (define (Lex/instantiation lex str)
   (list 'lex-instance lex (make-sio str)))

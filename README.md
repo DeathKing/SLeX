@@ -16,7 +16,23 @@ Yet another not-so-simple lex analysor generator and naïve regular expression e
 
 ## Use SLeX as Regular expression engine
 
-A [regular expression](https://en.wikipedia.org/wiki/Regular_expression) usually a sequence of characters that define a search pattern.
+A [regular expression](https://en.wikipedia.org/wiki/Regular_expression) usually is a sequence of characters that define a search pattern.
+
+In usual programming language, Regular Expression is defined in form of String or literal. But for now in SLeX, you can only use RE-IR (Intermediate Representation) to define a RE (see [Roadmap](#roadmap)). In SLeX, we have:
+
+  + 1 primitive RE-IR constant:
+    1. `eps`: eat none of input characters.
+  + 6 primitive constructors: 
+    1. `sig`, `sig*`: eat a single character in the given char-set.
+    2. `sig-co`, `sig*-co`: eat any single character which not in the given char-set.
+    3. `exact`: match exactly the given string (i.e. sequence of chars), case-sensitively.
+    4. `exact-ci`: match exactly the given string, but case-insensitively.
+ + and another 5 RE-IR combinators:
+    1. `alt`
+    2. `seq`
+    3. `rep?`
+    4. `rep+`
+    5. `kln*`
 
 ### primitives and combinators
 
@@ -153,7 +169,7 @@ This may be confusing, let's take `example/simple-lang.scm` as example:
     ; also action procedure    
     (sv-token
       (lambda (color-func)
-        (lambda (token-str start-at length)
+        (lambda (token-str start-at)
           (color-func token-str)))))
   
   (rule

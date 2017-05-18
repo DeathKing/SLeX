@@ -10,21 +10,23 @@
   (definition
     (integer     (rep+ (sig slex:digit)))
     (identifier  (rep+ (sig slex:alpha)))
-    (func        (sig* #\+ #\-))
+    (operator    (sig* #\+ #\- #\* #\/))
     (keyword-set (exact-ci "set!"))
     (delimiter   (sig slex:whitespace))
     
     ; also action procedure    
     (sv-token
       (lambda (color-func)
-        (lambda (token-str start-at length)
+        (lambda (token-str start-at)
           (color-func token-str)))))
   
   (rule
     (integer     (sv-token string-white))
     (keyword-set (sv-token string-red))
     (identifier  (sv-token string-green))
-    (func        (sv-token string-blue))
+    (operator    (sv-token string-blue))
+    ((sig* #\()  (sv-token string-red))
+    ((sig* #\))  (sv-token string-red))
     (delimiter   Lex/action:token-str)
     (default     Lex/action:handle-error))) ;error-handling
   
@@ -32,9 +34,11 @@
 ;;;     program ::= <stmt>*
 ;;;        stmt ::= (set! <identifier> <exp>) | <exp>
 ;;;         exp ::= <func-call> | <atom>
-;;;   func-call ::= (<func> <exp> <exp>)
-;;;        func ::= + | -
+;;;   func-call ::= (<operator> <exp> <exp>)
+;;;    operator ::= + | - | * | /
 ;;;        atom ::= <identifier> | <integer>
+
+
 
 ;(define match-atom
 
@@ -61,7 +65,9 @@
 
 ;(define eval)
 
-(define s "12 34 asdfb set! + \nasdf 13")
+(define s "(set! a 1)
+(set! b (* (+ 3 4) (- 7 9)))")
+
 (define L0 (Lex/instantiation simple-L s))
 
 (until (LexInstance/eof? L0)
