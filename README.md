@@ -1,14 +1,7 @@
-```text
-          .M"""bgd `7MMF'               `YMM'   `MP' 
-         ,MI    "Y   MM                   VMb.  ,P   
-         `MMb.       MM                    `MM.M'    
-           `YMMNq.   MM                      MMb     
-         .     `MM   MM      ,  .gP"Ya     ,M'`Mb.   
-         Mb     dM   MM     ,M ,M'   Yb   ,P   `MM.  
-         P"Ybmmd"  .JMMmmmmMMM 8M"""""" .MM:.  .:MMa.
-                               YM.    ,
-                                `Mbmmd'
-``` 
+
+  
+
+<img align=“center” src=“./assets/logo.png“ alt=“SLeX Logo”>
 
 Yet another not-so-simple lex analysor generator and naïve regular expression engine written in programming language Scheme.
 

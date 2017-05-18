@@ -598,6 +598,29 @@
                    (substring str 0 index)
                    (substring str index max-index)))))))
 
+(define (DFA/run-and-trace D str)
+  (let ((start (DFA/get-start D))
+        (accepts (DFA/get-accepts D))
+        (max-index (string-length str)))
+    (let iter ((current-state start) (index 0) (trace '()))
+      (cond ((and (< index max-index)
+                  (DFA/forward-step current-state (string-ref str index))) =>
+             (lambda (next-state)
+               (iter next-state
+                     (+ 1 index)
+                     (cons (cons next-state (string-ref str index)) trace))))
+            (else
+             (list (and (memq current-state accepts) #t)
+                   (substring str 0 index)
+                   (substring str index max-index)
+                   (reverse trace)))))))
+
+(define make-match-result list)
+
+(define MatchResult/success? car)
+
+(define MatchResult/get-result cdr)
+
 (define DFA/partial-delta
   (let ((not-found (make-match-result #f)))
     (lambda (D sio)
@@ -863,14 +886,6 @@
 
 (define (Lex/action:token-str token-str start-at)
   token-str)
-
-(define make-match-result list)
-
-(define MatchResult/success? car)
-
-(define MatchResult/get-result cdr)
-
-
 
 (define (Lex/instantiation lex str)
   (list 'lex-instance lex (make-sio str)))
